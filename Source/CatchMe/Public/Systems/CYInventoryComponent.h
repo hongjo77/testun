@@ -54,6 +54,21 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FOnInventoryUpdated OnInventoryUpdated;
 
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Inventory")
+	int32 CurrentSelectedSlot = 0;
+
+	// 슬롯 선택
+	UFUNCTION(BlueprintCallable)
+	void SelectSlot(int32 SlotIndex);
+
+	// 현재 선택된 아이템 가져오기
+	UFUNCTION(BlueprintCallable)
+	ACYItemBase* GetSelectedItem();
+
+	// 선택된 아이템 사용
+	UFUNCTION(BlueprintCallable)
+	void UseSelectedItem();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;

@@ -72,6 +72,11 @@ void APlayerCharacter::Tick(float DeltaTime)
 
 void APlayerCharacter::HandleMove(const FVector2D& Value)
 {
+    if (!bCanMove) 
+    {
+        return;
+    }
+    
     if (Controller && !Value.IsZero())
     {
         // 전진/후진 (W/S)
@@ -116,8 +121,6 @@ void APlayerCharacter::HandleStopJump()
 
 void APlayerCharacter::HandleInteract()
 {
-    UE_LOG(LogTemp, Warning, TEXT("HandleInteract called"));
-    
     if (NearbyItem)
     {
         UE_LOG(LogTemp, Warning, TEXT("Trying to pickup: %s"), *NearbyItem->GetName());
@@ -131,36 +134,9 @@ void APlayerCharacter::HandleInteract()
 
 void APlayerCharacter::HandleUseItem()
 {
-    // 좌클릭 - 아이템/무기 사용
-    if (WeaponManager && WeaponManager->CurrentWeapon)
+    if (Inventory)
     {
-        // 무기가 장착되어 있으면 무기 사용
-        FHitResult HitResult;
-        if (PerformLineTrace(HitResult))
-        {
-            WeaponManager->ServerUseWeapon(HitResult.Location, HitResult.GetActor());
-        }
-    }
-    else if (Inventory)
-    {
-        // 무기가 없으면 인벤토리 첫 번째 슬롯 아이템 사용
-        if (ACYItemBase* Item = Inventory->GetItemAtSlot(0))
-        {
-            // 트랩인지 확인
-            if (ACYTrapBase* TrapItem = Cast<ACYTrapBase>(Item))
-            {
-                // 트랩 설치
-                FVector PlaceLocation = GetActorLocation() + GetActorForwardVector() * 200.0f;
-                TrapManager->ServerPlaceTrap(TrapItem->GetClass(), PlaceLocation, GetActorRotation());
-                Inventory->ServerRemoveItem(0);
-            }
-            else
-            {
-                // 일반 아이템 사용
-                Item->OnItemUsed(this);
-                Inventory->ServerRemoveItem(0);
-            }
-        }
+        Inventory->UseSelectedItem();
     }
 }
 

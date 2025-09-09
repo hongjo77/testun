@@ -22,14 +22,6 @@ class CATCHME_API APlayerCharacter : public ACharacter
 public:
     APlayerCharacter();
 
-protected:
-    // 카메라 컴포넌트들
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
-    USpringArmComponent* SpringArmComponent;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
-    UCameraComponent* CameraComponent;
-
     // 아이템/무기 시스템 컴포넌트들
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Systems")
     UCYEffectManagerComponent* EffectManager;
@@ -42,6 +34,14 @@ protected:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Systems")
     UCYTrapManagerComponent* TrapManager;
+
+protected:
+    // 카메라 컴포넌트들
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+    USpringArmComponent* SpringArmComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+    UCameraComponent* CameraComponent;
 
     // 인터랙션
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
@@ -76,13 +76,13 @@ public:
     void HandleInteract();
     void HandleUseItem();
 
+    // 라인 트레이스 유틸리티
+    bool PerformLineTrace(FHitResult& HitResult, float Range = 1000.0f);
+
 protected:
     virtual void BeginPlay() override;
 
     // 아이템 상호작용
     void CheckForNearbyItems();
     void PickupItem(ACYItemBase* Item);
-
-    // 라인 트레이스 유틸리티
-    bool PerformLineTrace(FHitResult& HitResult, float Range = 1000.0f);
 };

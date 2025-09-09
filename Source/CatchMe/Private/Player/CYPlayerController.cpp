@@ -20,12 +20,25 @@ void ACYPlayerController::BeginPlay()
     {
         if (InputMappingContext)
         {
+            UE_LOG(LogTemp, Warning, TEXT("Adding InputMappingContext"));
             Subsystem->AddMappingContext(InputMappingContext, 0);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("InputMappingContext is NULL"));
         }
     }
 
     // 컨트롤하는 캐릭터 캐싱
     ControlledCharacter = Cast<APlayerCharacter>(GetPawn());
+    if (ControlledCharacter)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("ControlledCharacter cached successfully"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to cache ControlledCharacter"));
+    }
 }
 
 void ACYPlayerController::SetupInputComponent()
@@ -57,7 +70,6 @@ void ACYPlayerController::SetupInputComponent()
         // 상호작용 입력 바인딩
         if (InteractAction)
         {
-            UE_LOG(LogTemp, Warning, TEXT("InteractAction"));
             EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &ACYPlayerController::HandleInteract);
         }
 
@@ -65,6 +77,16 @@ void ACYPlayerController::SetupInputComponent()
         if (UseItemAction)
         {
             EnhancedInputComponent->BindAction(UseItemAction, ETriggerEvent::Started, this, &ACYPlayerController::HandleUseItem);
+        }
+
+        if (Slot1Action)
+        {
+            EnhancedInputComponent->BindAction(Slot1Action, ETriggerEvent::Started, this, &ACYPlayerController::HandleSlot1);
+        }
+
+        if (Slot2Action)
+        {
+            EnhancedInputComponent->BindAction(Slot1Action, ETriggerEvent::Started, this, &ACYPlayerController::HandleSlot2);
         }
     }
 }
@@ -118,5 +140,21 @@ void ACYPlayerController::HandleUseItem()
     if (ControlledCharacter)
     {
         ControlledCharacter->HandleUseItem();
+    }
+}
+
+void ACYPlayerController::HandleSlot1()
+{
+    if (ControlledCharacter && ControlledCharacter->Inventory)
+    {
+        ControlledCharacter->Inventory->SelectSlot(0);
+    }
+}
+
+void ACYPlayerController::HandleSlot2()
+{
+    if (ControlledCharacter && ControlledCharacter->Inventory)
+    {
+        ControlledCharacter->Inventory->SelectSlot(1);
     }
 }

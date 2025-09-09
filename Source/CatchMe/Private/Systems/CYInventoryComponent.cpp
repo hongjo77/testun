@@ -1,7 +1,10 @@
 // Systems/CYInventoryComponent.cpp
 #include "Systems/CYInventoryComponent.h"
 #include "Item/CYItemBase.h"
+#include "Item/CYTrapBase.h"
 #include "Net/UnrealNetwork.h"
+#include "Player/PlayerCharacter.h"
+#include "Weapon/CYWeaponBase.h"
 
 UCYInventoryComponent::UCYInventoryComponent()
 {
@@ -98,4 +101,79 @@ int32 UCYInventoryComponent::GetItemCount(FGameplayTag ItemType)
 void UCYInventoryComponent::OnRep_Items()
 {
     OnInventoryUpdated.Broadcast();
+}
+
+void UCYInventoryComponent::SelectSlot(int32 SlotIndex)
+{
+    if (SlotIndex >= 0 && SlotIndex < MaxSlots)
+    {
+        CurrentSelectedSlot = SlotIndex;
+        UE_LOG(LogTemp, Warning, TEXT("Selected slot %d"), SlotIndex);
+        
+        // UI 업데이트 이벤트
+        OnInventoryUpdated.Broadcast();
+    }
+}
+
+ACYItemBase* UCYInventoryComponent::GetSelectedItem()
+{
+    return GetItemAtSlot(CurrentSelectedSlot);
+}
+
+void UCYInventoryComponent::UseSelectedItem()
+{
+    ACYItemBase* SelectedItem = GetSelectedItem();
+    if (!SelectedItem) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No item selected"));
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Using selected item: %s"), *SelectedItem->GetName());
+
+    // 무기인지 확인
+    if (ACYWeaponBase* WeaponItem = Cast<ACYWeaponBase>(SelectedItem))
+    {
+        // 무기 장착/공격 로직
+        APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+        if (Player && Player->WeaponManager)
+        {
+            if (Player->WeaponManager->CurrentWeapon == WeaponItem)
+            {
+                // 이미 장착된 무기면 공격
+                UE_LOG(LogTemp, Warning, TEXT("Attacking with weapon"));
+                FHitResult HitResult;
+                if (Player->PerformLineTrace(HitResult))
+                {
+                    Player->WeaponManager->ServerUseWeapon(HitResult.Location, HitResult.GetActor());
+                }
+            }
+            else
+            {
+                // 다른 무기면 장착
+                UE_LOG(LogTemp, Warning, TEXT("Equipping weapon"));
+                Player->WeaponManager->ServerEquipWeapon(WeaponItem);
+                ServerRemoveItem(CurrentSelectedSlot);
+            }
+        }
+    }
+    // 트랩인지 확인
+    else if (ACYTrapBase* TrapItem = Cast<ACYTrapBase>(SelectedItem))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Placing trap"));
+        APlayerCharacter* Player = Cast<APlayerCharacter>(GetOwner());
+        if (Player && Player->TrapManager)
+        {
+            FVector PlaceLocation = Player->GetActorLocation() + Player->GetActorForwardVector() * 200.0f;
+            Player->TrapManager->ServerPlaceTrap(TrapItem->GetClass(), PlaceLocation, Player->GetActorRotation());
+            ServerRemoveItem(CurrentSelectedSlot);
+        }
+    }
+    // 소모품
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Using consumable"));
+        SelectedItem->OnItemUsed(GetOwner());
+        ServerRemoveItem(CurrentSelectedSlot);
+    }
 }

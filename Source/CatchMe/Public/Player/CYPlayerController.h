@@ -42,6 +42,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enhanced Input")
 	UInputAction* UseItemAction;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enhanced Input")
+	UInputAction* Slot1Action;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enhanced Input")
+	UInputAction* Slot2Action;
+
 	// 입력 처리 함수들
 	void HandleMove(const FInputActionValue& Value);
 	void HandleLook(const FInputActionValue& Value);
@@ -49,6 +55,8 @@ protected:
 	void HandleStopJump();
 	void HandleInteract();
 	void HandleUseItem();
+	void HandleSlot1();
+	void HandleSlot2();
 
 private:
 	// 캐릭터 레퍼런스 (캐싱)
