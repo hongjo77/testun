@@ -54,7 +54,7 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FOnInventoryUpdated OnInventoryUpdated;
 
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Inventory")
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
 	int32 CurrentSelectedSlot = 0;
 
 	// 슬롯 선택
@@ -68,6 +68,12 @@ public:
 	// 선택된 아이템 사용
 	UFUNCTION(BlueprintCallable)
 	void UseSelectedItem();
+	
+	UFUNCTION(BlueprintCallable)
+	void AutoEquipItem(ACYItemBase* Item);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable)
+	void ServerRemoveItemByReference(ACYItemBase* Item);
 
 protected:
 	virtual void BeginPlay() override;

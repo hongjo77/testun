@@ -92,7 +92,17 @@ void ACYItemBase::ServerPickupItem_Implementation(AActor* User)
     }
 
     UE_LOG(LogTemp, Warning, TEXT("Adding item to inventory"));
+    
+    // 인벤토리에 추가
+    int32 SlotIndex = Inventory->GetFirstEmptySlotIndex();
     Inventory->ServerAddItem(this);
+    
+    // 슬롯 0에 추가되었으면 바로 장착
+    if (SlotIndex == 0)
+    {
+        Inventory->SelectSlot(0);
+        Inventory->AutoEquipItem(this);
+    }
     
     SetActorHiddenInGame(true);
     SetActorEnableCollision(false);

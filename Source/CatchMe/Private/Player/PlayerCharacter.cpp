@@ -6,6 +6,8 @@
 #include "DrawDebugHelpers.h"
 #include "Item/CYTrapBase.h"
 #include "Systems/CYEffectManagerComponent.h"
+#include "Weapon/CYWeaponBase.h"
+#include "Net/UnrealNetwork.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -60,6 +62,13 @@ void APlayerCharacter::BeginPlay()
         EffectManager->OnEffectApplied.AddDynamic(this, &APlayerCharacter::OnEffectApplied);
         EffectManager->OnEffectRemoved.AddDynamic(this, &APlayerCharacter::OnEffectRemoved);
     }
+}
+
+void APlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    
+    DOREPLIFETIME(APlayerCharacter, EquippedItem);
 }
 
 void APlayerCharacter::Tick(float DeltaTime)
@@ -134,10 +143,8 @@ void APlayerCharacter::HandleInteract()
 
 void APlayerCharacter::HandleUseItem()
 {
-    if (Inventory)
-    {
-        Inventory->UseSelectedItem();
-    }
+    // 장착된 아이템 사용
+    UseEquippedItem();
 }
 
 // ========================= 기타 함수들 =========================
@@ -254,4 +261,91 @@ void APlayerCharacter::OnEffectRemoved(FGameplayTag EffectType)
         bCanMove = true;
         UE_LOG(LogTemp, Warning, TEXT("Player can move again"));
     }
+}
+
+void APlayerCharacter::ServerEquipItem_Implementation(ACYItemBase* Item)
+{
+    if (!HasAuthority() || !Item) return;
+
+    // 기존 아이템 해제
+    if (EquippedItem)
+    {
+        ServerUnequipItem();
+    }
+
+    // 새 아이템 장착
+    EquippedItem = Item;
+    AttachItemToHand(Item);
+    
+    UE_LOG(LogTemp, Warning, TEXT("Equipped item: %s"), *Item->GetName());
+}
+
+void APlayerCharacter::ServerUnequipItem_Implementation()
+{
+    if (!HasAuthority()) return;
+
+    if (EquippedItem)
+    {
+        DetachItemFromHand();
+        EquippedItem = nullptr;
+        UE_LOG(LogTemp, Warning, TEXT("Unequipped item"));
+    }
+}
+
+void APlayerCharacter::UseEquippedItem()
+{
+    if (!EquippedItem) return;
+
+    // 무기인지 확인
+    if (ACYWeaponBase* Weapon = Cast<ACYWeaponBase>(EquippedItem))
+    {
+        FHitResult HitResult;
+        if (PerformLineTrace(HitResult))
+        {
+            Weapon->ServerAttack(HitResult.Location, HitResult.GetActor());
+        }
+    }
+    // 트랩인지 확인
+    else if (ACYTrapBase* Trap = Cast<ACYTrapBase>(EquippedItem))
+    {
+        FVector PlaceLocation = GetActorLocation() + GetActorForwardVector() * 200.0f;
+        TrapManager->ServerPlaceTrap(Trap->GetClass(), PlaceLocation, GetActorRotation());
+        
+        // 트랩 사용 후 인벤토리에서 제거
+        if (Inventory)
+        {
+            Inventory->ServerRemoveItemByReference(Trap);
+        }
+        ServerUnequipItem();
+    }
+    // 소모품
+    else
+    {
+        EquippedItem->OnItemUsed(this);
+        
+        // 소모품 사용 후 인벤토리에서 제거
+        if (Inventory)
+        {
+            Inventory->ServerRemoveItemByReference(EquippedItem);
+        }
+        ServerUnequipItem();
+    }
+}
+
+void APlayerCharacter::AttachItemToHand(ACYItemBase* Item)
+{
+    if (!Item || !GetMesh()) return;
+
+    Item->AttachToComponent(
+        GetMesh(),
+        FAttachmentTransformRules::SnapToTargetIncludingScale,
+        "hand_r_socket"  // 오른손 소켓
+    );
+}
+
+void APlayerCharacter::DetachItemFromHand()
+{
+    if (!EquippedItem) return;
+
+    EquippedItem->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 }

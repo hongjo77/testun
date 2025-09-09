@@ -86,7 +86,7 @@ void ACYPlayerController::SetupInputComponent()
 
         if (Slot2Action)
         {
-            EnhancedInputComponent->BindAction(Slot1Action, ETriggerEvent::Started, this, &ACYPlayerController::HandleSlot2);
+            EnhancedInputComponent->BindAction(Slot2Action, ETriggerEvent::Started, this, &ACYPlayerController::HandleSlot2);
         }
     }
 }

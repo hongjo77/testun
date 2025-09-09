@@ -79,10 +79,29 @@ public:
     // 라인 트레이스 유틸리티
     bool PerformLineTrace(FHitResult& HitResult, float Range = 1000.0f);
 
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Equipment")
+    ACYItemBase* EquippedItem;
+
+    // 아이템 장착
+    UFUNCTION(Server, Reliable, BlueprintCallable)
+    void ServerEquipItem(ACYItemBase* Item);
+
+    // 아이템 해제
+    UFUNCTION(Server, Reliable, BlueprintCallable)
+    void ServerUnequipItem();
+
+    // 장착된 아이템 사용
+    UFUNCTION(BlueprintCallable)
+    void UseEquippedItem();
+
 protected:
     virtual void BeginPlay() override;
+
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     // 아이템 상호작용
     void CheckForNearbyItems();
     void PickupItem(ACYItemBase* Item);
+    void AttachItemToHand(ACYItemBase* Item);
+    void DetachItemFromHand();
 };
