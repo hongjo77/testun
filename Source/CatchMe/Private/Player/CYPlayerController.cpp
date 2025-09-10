@@ -39,6 +39,34 @@ void ACYPlayerController::BeginPlay()
     {
         UE_LOG(LogTemp, Warning, TEXT("Failed to cache ControlledCharacter"));
     }
+    
+    TrySetControlledCharacter();
+}
+
+void ACYPlayerController::OnPossess(APawn* InPawn)
+{
+    Super::OnPossess(InPawn);
+    
+    UE_LOG(LogTemp, Warning, TEXT("OnPossess called with pawn: %s"), InPawn ? *InPawn->GetName() : TEXT("NULL"));
+    
+    // Pawn이 할당될 때 캐릭터 캐싱
+    TrySetControlledCharacter();
+}
+
+void ACYPlayerController::TrySetControlledCharacter()
+{
+    if (!ControlledCharacter)
+    {
+        ControlledCharacter = Cast<APlayerCharacter>(GetPawn());
+        if (ControlledCharacter)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("ControlledCharacter cached successfully: %s"), *ControlledCharacter->GetName());
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Failed to cache ControlledCharacter - Pawn: %s"), GetPawn() ? *GetPawn()->GetName() : TEXT("NULL"));
+        }
+    }
 }
 
 void ACYPlayerController::SetupInputComponent()

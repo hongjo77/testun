@@ -50,7 +50,7 @@ public:
     void ServerPickupItem(AActor* User);
 
     // 픽업 가능 여부
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Info")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "Item Info")
     bool bCanPickup = true;
 
 protected:

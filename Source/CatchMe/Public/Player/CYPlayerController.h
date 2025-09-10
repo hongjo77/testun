@@ -22,6 +22,7 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+	virtual void OnPossess(APawn* InPawn) override;
 
 	// Enhanced Input Assets
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enhanced Input")
@@ -62,4 +63,7 @@ private:
 	// 캐릭터 레퍼런스 (캐싱)
 	UPROPERTY()
 	APlayerCharacter* ControlledCharacter;
+
+	// 컨트롤 캐릭터 설정 시도
+	void TrySetControlledCharacter();
 };

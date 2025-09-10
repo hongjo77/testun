@@ -177,8 +177,18 @@ void UCYInventoryComponent::AutoEquipItem(ACYItemBase* Item)
 
     UE_LOG(LogTemp, Warning, TEXT("Auto-equipping item: %s"), *Item->GetName());
     
-    // 모든 아이템을 장착 (무기, 트랩, 소모품 모두)
-    Player->ServerEquipItem(Item);
+    // 무기인지 확인
+    if (ACYWeaponBase* WeaponItem = Cast<ACYWeaponBase>(Item))
+    {
+        // 인벤토리에서 완전 제거 후 장착
+        ServerRemoveItemByReference(WeaponItem);
+        Player->ServerEquipItem(WeaponItem);
+    }
+    else
+    {
+        // 트랩이나 소모품은 인벤토리에 유지하고 장착만
+        Player->ServerEquipItem(Item);
+    }
 }
 
 void UCYInventoryComponent::ServerRemoveItemByReference_Implementation(ACYItemBase* Item)

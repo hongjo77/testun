@@ -265,7 +265,7 @@ void APlayerCharacter::OnEffectRemoved(FGameplayTag EffectType)
 
 void APlayerCharacter::ServerEquipItem_Implementation(ACYItemBase* Item)
 {
-    if (!HasAuthority() || !Item) return;
+    if (!HasAuthority() || !Item || !IsValid(Item)) return;
 
     // 기존 아이템 해제
     if (EquippedItem)
@@ -275,9 +275,13 @@ void APlayerCharacter::ServerEquipItem_Implementation(ACYItemBase* Item)
 
     // 새 아이템 장착
     EquippedItem = Item;
+    
+    // 월드에서 숨기기 해제하고 손에 부착
+    Item->SetActorHiddenInGame(false);
+    Item->SetActorEnableCollision(false);
     AttachItemToHand(Item);
     
-    UE_LOG(LogTemp, Warning, TEXT("Equipped item: %s"), *Item->GetName());
+    UE_LOG(LogTemp, Warning, TEXT("Successfully equipped item: %s"), *Item->GetName());
 }
 
 void APlayerCharacter::ServerUnequipItem_Implementation()
@@ -294,40 +298,65 @@ void APlayerCharacter::ServerUnequipItem_Implementation()
 
 void APlayerCharacter::UseEquippedItem()
 {
-    if (!EquippedItem) return;
+    // 유효성 검사 강화
+    if (!EquippedItem || !IsValid(EquippedItem)) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("EquippedItem is invalid"));
+        return;
+    }
 
     // 무기인지 확인
     if (ACYWeaponBase* Weapon = Cast<ACYWeaponBase>(EquippedItem))
     {
+        // 추가 유효성 검사
+        if (!IsValid(Weapon))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Weapon cast is invalid"));
+            EquippedItem = nullptr; // 무효한 참조 제거
+            return;
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("Using weapon: %s"), *Weapon->GetName());
+        
         FHitResult HitResult;
         if (PerformLineTrace(HitResult))
         {
-            Weapon->ServerAttack(HitResult.Location, HitResult.GetActor());
+            // 쿨다운 체크를 여기서도 수행
+            if (Weapon->CanAttack())
+            {
+                Weapon->ServerAttack(HitResult.Location, HitResult.GetActor());
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Weapon on cooldown"));
+            }
         }
     }
     // 트랩인지 확인
     else if (ACYTrapBase* Trap = Cast<ACYTrapBase>(EquippedItem))
     {
+        if (!IsValid(Trap))
+        {
+            EquippedItem = nullptr;
+            return;
+        }
+
         FVector PlaceLocation = GetActorLocation() + GetActorForwardVector() * 200.0f;
         TrapManager->ServerPlaceTrap(Trap->GetClass(), PlaceLocation, GetActorRotation());
         
-        // 트랩 사용 후 인벤토리에서 제거
-        if (Inventory)
-        {
-            Inventory->ServerRemoveItemByReference(Trap);
-        }
+        // 트랩 사용 후 해제
         ServerUnequipItem();
     }
     // 소모품
     else
     {
-        EquippedItem->OnItemUsed(this);
-        
-        // 소모품 사용 후 인벤토리에서 제거
-        if (Inventory)
+        if (!IsValid(EquippedItem))
         {
-            Inventory->ServerRemoveItemByReference(EquippedItem);
+            EquippedItem = nullptr;
+            return;
         }
+
+        EquippedItem->OnItemUsed(this);
         ServerUnequipItem();
     }
 }
