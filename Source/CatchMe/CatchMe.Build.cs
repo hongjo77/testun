@@ -18,13 +18,14 @@ public class CatchMe : ModuleRules
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
-			"GameplayTags"
+			"Slate",
+			"SlateCore",
+			"GameplayAbilities",
+			"GameplayTags",
+			"GameplayTasks"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { 
-			"Slate",
-			"SlateCore"
-		});
+		PrivateDependencyModuleNames.AddRange(new string[] { });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"CatchMe",

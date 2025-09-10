@@ -2,14 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
-#include "EnhancedInputComponent.h"
-#include "EnhancedInputSubsystems.h"
-#include "InputMappingContext.h"
-#include "InputAction.h"
-#include "PlayerCharacter.h"
 #include "CYPlayerController.generated.h"
 
-class APlayerController;
+class UInputMappingContext;
+class UInputAction;
 
 UCLASS()
 class CATCHME_API ACYPlayerController : public APlayerController
@@ -22,48 +18,31 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
-	virtual void OnPossess(APawn* InPawn) override;
 
-	// Enhanced Input Assets
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enhanced Input")
-	UInputMappingContext* InputMappingContext;
+	// Enhanced Input
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	UInputMappingContext* DefaultMappingContext;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enhanced Input")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* MoveAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enhanced Input")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* LookAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enhanced Input")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* JumpAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enhanced Input")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* InteractAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enhanced Input")
-	UInputAction* UseItemAction;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	UInputAction* AttackAction;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enhanced Input")
-	UInputAction* Slot1Action;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Enhanced Input")
-	UInputAction* Slot2Action;
-
-	// 입력 처리 함수들
-	void HandleMove(const FInputActionValue& Value);
-	void HandleLook(const FInputActionValue& Value);
-	void HandleJump();
-	void HandleStopJump();
-	void HandleInteract();
-	void HandleUseItem();
-	void HandleSlot1();
-	void HandleSlot2();
-
-private:
-	// 캐릭터 레퍼런스 (캐싱)
-	UPROPERTY()
-	APlayerCharacter* ControlledCharacter;
-
-	// 컨트롤 캐릭터 설정 시도
-	void TrySetControlledCharacter();
+	// Input Callbacks
+	void Move(const struct FInputActionValue& Value);
+	void Look(const FInputActionValue& Value);
+	void JumpPressed();
+	void JumpReleased();
+	void InteractPressed();
+	void AttackPressed();
 };
