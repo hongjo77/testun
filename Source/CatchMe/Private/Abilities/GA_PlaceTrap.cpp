@@ -91,9 +91,6 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     
     if (ACYTrapBase* Trap = GetWorld()->SpawnActor<ACYTrapBase>(TrapClass, SpawnLocation, SpawnRotation, SpawnParams))
     {
-        // C++로 만든 GameplayEffect 클래스 직접 사용
-        Trap->TrapEffectClass = UGE_ImmobilizeTrap::StaticClass();
-        
         UE_LOG(LogTemp, Warning, TEXT("SUCCESS: Trap placed at %s by %s"), 
            *SpawnLocation.ToString(), *PlayerCharacter->GetName());
     }

@@ -30,6 +30,19 @@ UGE_ImmobilizeTrap::UGE_ImmobilizeTrap()
     Modifiers.Add(MoveSpeedModifier);
 }
 
+UGE_SlowTrap::UGE_SlowTrap()
+{
+    DurationPolicy = EGameplayEffectDurationType::HasDuration;
+    DurationMagnitude = FGameplayEffectModifierMagnitude(5.0f);
+    
+    FGameplayModifierInfo MoveSpeedModifier;
+    MoveSpeedModifier.Attribute = UCYAttributeSet::GetMoveSpeedAttribute();
+    MoveSpeedModifier.ModifierOp = EGameplayModOp::Override;
+    MoveSpeedModifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(200.0f); // 느림
+    
+    Modifiers.Add(MoveSpeedModifier);
+}
+
 UGE_WeaponDamage::UGE_WeaponDamage()
 {
     DurationPolicy = EGameplayEffectDurationType::Instant;

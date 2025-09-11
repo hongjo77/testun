@@ -23,6 +23,14 @@ public:
 	UGE_ImmobilizeTrap();
 };
 
+UCLASS()
+class CATCHME_API UGE_SlowTrap : public UGameplayEffect
+{
+	GENERATED_BODY()
+public:
+	UGE_SlowTrap();
+};
+
 // 무기 데미지 효과
 UCLASS()
 class CATCHME_API UGE_WeaponDamage : public UGameplayEffect

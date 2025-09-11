@@ -27,8 +27,6 @@ ACYTrapBase::ACYTrapBase()
         ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         ItemMesh->SetVisibility(true);
     }
-    
-    TrapEffectClass = UGE_ImmobilizeTrap::StaticClass();
 }
 
 void ACYTrapBase::BeginPlay()
@@ -70,8 +68,8 @@ void ACYTrapBase::ArmTrap()
 }
 
 void ACYTrapBase::OnTrapTriggered(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-    UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
-    bool bFromSweep, const FHitResult& SweepResult)
+        UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+        bool bFromSweep, const FHitResult& SweepResult)
 {
     UE_LOG(LogTemp, Warning, TEXT("Trap triggered by: %s"), OtherActor ? *OtherActor->GetName() : TEXT("NULL"));
     
@@ -84,76 +82,31 @@ void ACYTrapBase::OnTrapTriggered(UPrimitiveComponent* OverlappedComponent, AAct
     UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
     if (!TargetASC) return;
 
-    // ✅ 커스텀 설정 사용 여부 확인
-    if (bUseCustomMovement)
+    // ✅ ItemEffects만 사용하는 단순한 로직
+    UE_LOG(LogTemp, Warning, TEXT("ItemEffects count: %d"), ItemEffects.Num());
+    
+    for (TSubclassOf<UGameplayEffect> EffectClass : ItemEffects)
     {
-        ApplyCustomMovementEffect(TargetASC);
-    }
-    else
-    {
-        // 기존 방식: ItemEffects 또는 TrapEffectClass
-        if (ItemEffects.Num() > 0)
+        if (EffectClass)
         {
-            for (TSubclassOf<UGameplayEffect> EffectClass : ItemEffects)
-            {
-                if (EffectClass)
-                {
-                    FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
-                    EffectContext.AddSourceObject(this);
-                    
-                    FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(EffectClass, 1, EffectContext);
-                    if (EffectSpec.IsValid())
-                    {
-                        TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
-                        UE_LOG(LogTemp, Warning, TEXT("Default effect applied"));
-                    }
-                }
-            }
-        }
-        else if (TrapEffectClass)
-        {
+            UE_LOG(LogTemp, Warning, TEXT("Applying effect: %s"), *EffectClass->GetName());
+            
             FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
             EffectContext.AddSourceObject(this);
             
-            FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(TrapEffectClass, 1, EffectContext);
+            FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(EffectClass, 1, EffectContext);
             if (EffectSpec.IsValid())
             {
                 TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
-                UE_LOG(LogTemp, Warning, TEXT("TrapEffectClass applied"));
+                UE_LOG(LogTemp, Warning, TEXT("Effect applied successfully"));
             }
         }
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Destroying trap"));
-    Destroy();
-}
-
-void ACYTrapBase::ApplyCustomMovementEffect(UAbilitySystemComponent* TargetASC)
-{
-    // ✅ const_cast로 Cast 오류 해결
-    if (const UAttributeSet* AttributeSetConst = TargetASC->GetAttributeSet(UCYAttributeSet::StaticClass()))
+    if (ItemEffects.Num() == 0)
     {
-        UCYAttributeSet* AttributeSet = const_cast<UCYAttributeSet*>(Cast<UCYAttributeSet>(AttributeSetConst));
-        if (AttributeSet)
-        {
-            // 현재 속도 백업
-            float OriginalSpeed = AttributeSet->GetMoveSpeed();
-            
-            // 즉시 이동속도 변경
-            AttributeSet->SetMoveSpeed(CustomMoveSpeed);
-            
-            UE_LOG(LogTemp, Warning, TEXT("Custom movement: Speed changed to %f for %f seconds"), CustomMoveSpeed, CustomDuration);
-            
-            // 타이머로 원래 속도 복구
-            FTimerHandle RestoreTimer;
-            GetWorld()->GetTimerManager().SetTimer(RestoreTimer, [AttributeSet, OriginalSpeed]()
-            {
-                if (IsValid(AttributeSet))
-                {
-                    AttributeSet->SetMoveSpeed(OriginalSpeed);
-                    UE_LOG(LogTemp, Warning, TEXT("Movement speed restored to %f"), OriginalSpeed);
-                }
-            }, CustomDuration, false);
-        }
+        UE_LOG(LogTemp, Warning, TEXT("No ItemEffects configured"));
     }
+
+    Destroy();
 }

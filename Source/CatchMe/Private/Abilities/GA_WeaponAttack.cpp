@@ -13,16 +13,10 @@ UGA_WeaponAttack::UGA_WeaponAttack()
     InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
     NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
-    // 태그 설정 (warning 무시)
-    #pragma warning(push)
-    #pragma warning(disable: 4996)
-    
     AbilityTags.AddTag(FGameplayTag::RequestGameplayTag("Ability.Weapon.Attack"));
     ActivationOwnedTags.AddTag(FGameplayTag::RequestGameplayTag("State.Attacking"));
     ActivationBlockedTags.AddTag(FGameplayTag::RequestGameplayTag("State.Stunned"));
     ActivationBlockedTags.AddTag(FGameplayTag::RequestGameplayTag("State.Dead"));
-    
-    #pragma warning(pop)
 }
 
 void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
