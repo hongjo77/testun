@@ -26,8 +26,12 @@ void ACYPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
 
+    UE_LOG(LogTemp, Warning, TEXT("=== PlayerController::SetupInputComponent called ==="));
+
     if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent))
     {
+        UE_LOG(LogTemp, Warning, TEXT("PlayerController: Enhanced Input Component found"));
+        
         // Movement
         EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACYPlayerController::Move);
         EnhancedInput->BindAction(LookAction, ETriggerEvent::Triggered, this, &ACYPlayerController::Look);
@@ -36,7 +40,17 @@ void ACYPlayerController::SetupInputComponent()
         EnhancedInput->BindAction(JumpAction, ETriggerEvent::Started, this, &ACYPlayerController::JumpPressed);
         EnhancedInput->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACYPlayerController::JumpReleased);
         EnhancedInput->BindAction(InteractAction, ETriggerEvent::Started, this, &ACYPlayerController::InteractPressed);
-        EnhancedInput->BindAction(AttackAction, ETriggerEvent::Started, this, &ACYPlayerController::AttackPressed);
+        
+        // ✅ Attack 바인딩 확인
+        if (AttackAction)
+        {
+            EnhancedInput->BindAction(AttackAction, ETriggerEvent::Started, this, &ACYPlayerController::AttackPressed);
+            UE_LOG(LogTemp, Warning, TEXT("PlayerController: AttackAction bound successfully"));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("PlayerController: AttackAction is NULL! Check Blueprint settings"));
+        }
 
         // 인벤토리 슬롯들 (개별 바인딩)
         if (UseItem1Action)
@@ -57,6 +71,12 @@ void ACYPlayerController::SetupInputComponent()
             EnhancedInput->BindAction(UseItem8Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot8);
         if (UseItem9Action)
             EnhancedInput->BindAction(UseItem9Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot9);
+        
+        UE_LOG(LogTemp, Warning, TEXT("PlayerController: Input binding completed"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("PlayerController: Failed to cast to EnhancedInputComponent"));
     }
 }
 
@@ -102,11 +122,16 @@ void ACYPlayerController::InteractPressed()
 
 void ACYPlayerController::AttackPressed()
 {
-    UE_LOG(LogTemp, Warning, TEXT("PlayerController::AttackPressed"));
+    UE_LOG(LogTemp, Warning, TEXT("=== PlayerController::AttackPressed called ==="));
     
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
+        UE_LOG(LogTemp, Warning, TEXT("PlayerController: Found PlayerCharacter, calling AttackPressed"));
         PlayerCharacter->AttackPressed();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("PlayerController: GetPawn() failed or not CYPlayerCharacter"));
     }
 }
 

@@ -1,5 +1,6 @@
 ﻿#include "Components/CYItemInteractionComponent.h"
 #include "Components/CYInventoryComponent.h"
+#include "Components/CYWeaponComponent.h"
 #include "Items/CYItemBase.h"
 #include "Items/CYWeaponBase.h"
 #include "Engine/World.h"
@@ -47,26 +48,24 @@ void UCYItemInteractionComponent::ServerPickupItem_Implementation(ACYItemBase* I
 {
     if (!Item || !GetOwner()->HasAuthority() || Item->bIsPickedUp) return;
 
-    UCYInventoryComponent* InventoryComp = GetInventoryComponent();
-    if (!InventoryComp) return;
+    UE_LOG(LogTemp, Warning, TEXT("ServerPickupItem: %s with tag %s"), 
+           *Item->ItemName.ToString(), *Item->ItemTag.ToString());
 
-    // 무기인 경우 특별 처리 (장착)
-    if (ACYWeaponBase* Weapon = Cast<ACYWeaponBase>(Item))
+    UCYInventoryComponent* InventoryComp = GetInventoryComponent();
+    if (!InventoryComp) 
     {
-        // 무기 장착 로직은 별도 컴포넌트에서 처리
-        // 여기서는 인벤토리에 추가만
-        if (InventoryComp->AddItem(Item))
-        {
-            Item->OnPickup(Cast<ACYPlayerCharacter>(GetOwner()));
-        }
+        UE_LOG(LogTemp, Warning, TEXT("No InventoryComponent found"));
+        return;
     }
-    else
+
+    // ✅ 단순하게 인벤토리에만 추가 (AddItem에서 자동으로 무기/아이템 구분)
+    bool bAddedToInventory = InventoryComp->AddItem(Item);
+    UE_LOG(LogTemp, Warning, TEXT("Added to inventory result: %s"), 
+           bAddedToInventory ? TEXT("SUCCESS") : TEXT("FAILED"));
+    
+    if (bAddedToInventory)
     {
-        // 일반 아이템
-        if (InventoryComp->AddItem(Item))
-        {
-            Item->OnPickup(Cast<ACYPlayerCharacter>(GetOwner()));
-        }
+        Item->OnPickup(Cast<ACYPlayerCharacter>(GetOwner()));
     }
 }
 

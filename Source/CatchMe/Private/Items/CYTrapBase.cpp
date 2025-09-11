@@ -12,9 +12,7 @@ ACYTrapBase::ACYTrapBase()
 {
     ItemName = FText::FromString("Trap");
     ItemDescription = FText::FromString("A placeable trap");
-    
-    const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
-    ItemTag = GameplayTags.Item_Trap;
+    ItemTag = FGameplayTag::RequestGameplayTag("Item.Trap");
 
     // ✅ 트랩은 최대 5개까지 스택 가능
     MaxStackCount = 5;

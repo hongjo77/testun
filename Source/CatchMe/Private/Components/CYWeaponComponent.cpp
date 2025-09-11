@@ -8,7 +8,7 @@
 #include "Camera/CameraComponent.h"
 #include "Components/SphereComponent.h"
 #include "GAS/CYAbilitySystemComponent.h"
-#include "Components/CYInventoryComponent.h" // ✅ 추가
+#include "Components/CYInventoryComponent.h"
 #include "CYGameplayTags.h"
 #include "Net/UnrealNetwork.h"
 
@@ -27,6 +27,8 @@ void UCYWeaponComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 bool UCYWeaponComponent::EquipWeapon(ACYWeaponBase* Weapon)
 {
     if (!Weapon || !GetOwner()->HasAuthority()) return false;
+
+    UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Equipping weapon %s"), *Weapon->ItemName.ToString());
 
     if (CurrentWeapon)
     {
@@ -55,6 +57,7 @@ bool UCYWeaponComponent::EquipWeapon(ACYWeaponBase* Weapon)
     }
 
     OnWeaponChanged.Broadcast(nullptr, CurrentWeapon);
+    UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Weapon equipped successfully"));
     return true;
 }
 
@@ -73,25 +76,50 @@ bool UCYWeaponComponent::UnequipWeapon()
 
 bool UCYWeaponComponent::PerformAttack()
 {
-    // ✅ 공격 전에 항상 인벤토리 상태 출력
+    UE_LOG(LogTemp, Warning, TEXT("=== UCYWeaponComponent::PerformAttack called ==="));
+    
+    // ✅ 인벤토리 상태는 무조건 출력
     if (UCYInventoryComponent* InventoryComp = GetOwner()->FindComponentByClass<UCYInventoryComponent>())
     {
+        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Found InventoryComponent, printing status"));
         InventoryComp->PrintInventoryStatus();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: InventoryComponent not found!"));
     }
 
     if (!CurrentWeapon) 
     {
-        UE_LOG(LogTemp, Warning, TEXT("무기가 장착되지 않음"));
+        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: 무기가 장착되지 않음"));
         return false;
     }
 
+    UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Current weapon: %s"), *CurrentWeapon->ItemName.ToString());
+
     UAbilitySystemComponent* ASC = GetOwnerASC();
-    if (!ASC) return false;
+    if (!ASC) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: No ASC found"));
+        return false;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: ASC found, trying to cast to CY ASC"));
 
     if (UCYAbilitySystemComponent* CYasc = Cast<UCYAbilitySystemComponent>(ASC))
     {
         const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
-        return CYasc->TryActivateAbilityByTag(GameplayTags.Ability_Weapon_Attack);
+        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Trying to activate ability with tag: %s"), 
+               *GameplayTags.Ability_Weapon_Attack.ToString());
+        
+        bool bResult = CYasc->TryActivateAbilityByTag(GameplayTags.Ability_Weapon_Attack);
+        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Ability activation result: %s"), 
+               bResult ? TEXT("SUCCESS") : TEXT("FAILED"));
+        return bResult;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Failed to cast ASC to CYAbilitySystemComponent"));
     }
 
     return false;

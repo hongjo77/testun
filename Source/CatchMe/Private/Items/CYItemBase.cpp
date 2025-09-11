@@ -199,8 +199,18 @@ bool ACYItemBase::CanStackWith(ACYItemBase* OtherItem) const
 {
     if (!OtherItem) return false;
     
-    // 같은 클래스이고, 스택 가능하며, 최대치 미만인지 체크
-    return (GetClass() == OtherItem->GetClass() && 
-            MaxStackCount > 1 && 
-            OtherItem->ItemCount < OtherItem->MaxStackCount);
+    // ✅ 더 관대한 스택 조건
+    // 1. 같은 클래스여야 함
+    // 2. 스택 가능해야 함 (MaxStackCount > 1)
+    // 3. 다른 아이템이 최대 스택이 아니어야 함
+    bool bSameClass = (GetClass() == OtherItem->GetClass());
+    bool bStackable = (MaxStackCount > 1);
+    bool bHasSpace = (OtherItem->ItemCount < OtherItem->MaxStackCount);
+    
+    UE_LOG(LogTemp, Warning, TEXT("CanStackWith: SameClass=%s, Stackable=%s, HasSpace=%s"), 
+           bSameClass ? TEXT("true") : TEXT("false"),
+           bStackable ? TEXT("true") : TEXT("false"),
+           bHasSpace ? TEXT("true") : TEXT("false"));
+    
+    return bSameClass && bStackable && bHasSpace;
 }

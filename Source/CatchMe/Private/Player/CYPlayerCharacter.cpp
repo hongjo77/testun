@@ -153,9 +153,27 @@ void ACYPlayerCharacter::InteractPressed()
 
 void ACYPlayerCharacter::AttackPressed()
 {
+    UE_LOG(LogTemp, Warning, TEXT("=== ACYPlayerCharacter::AttackPressed called ==="));
+    
     if (WeaponComponent)
     {
+        UE_LOG(LogTemp, Warning, TEXT("PlayerCharacter: WeaponComponent found, calling PerformAttack"));
         WeaponComponent->PerformAttack();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("PlayerCharacter: WeaponComponent is NULL!"));
+        
+        // ✅ 컴포넌트 존재 여부 확인
+        if (InventoryComponent)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("PlayerCharacter: InventoryComponent exists"));
+            InventoryComponent->PrintInventoryStatus();
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("PlayerCharacter: InventoryComponent is also NULL!"));
+        }
     }
 }
 

@@ -13,10 +13,10 @@ UGA_WeaponAttack::UGA_WeaponAttack()
 
     const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
 
-    AbilityTags.AddTag(FGameplayTag::RequestGameplayTag("Ability.Weapon.Attack"));
-    ActivationOwnedTags.AddTag(FGameplayTag::RequestGameplayTag("State.Attacking"));
-    ActivationBlockedTags.AddTag(FGameplayTag::RequestGameplayTag("State.Stunned"));
-    ActivationBlockedTags.AddTag(FGameplayTag::RequestGameplayTag("State.Dead"));
+    AbilityTags.AddTag(GameplayTags.Ability_Weapon_Attack);
+    ActivationOwnedTags.AddTag(GameplayTags.State_Attacking);
+    ActivationBlockedTags.AddTag(GameplayTags.State_Stunned);
+    ActivationBlockedTags.AddTag(GameplayTags.State_Dead);
 }
 
 void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
