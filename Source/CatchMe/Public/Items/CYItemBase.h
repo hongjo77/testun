@@ -39,6 +39,9 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS")
     TArray<TSubclassOf<UGameplayEffect>> ItemEffects;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GAS")
+    TArray<TSubclassOf<UGameplayEffect>> DesiredTrapEffects;
+
     // Components
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     class UStaticMeshComponent* ItemMesh;

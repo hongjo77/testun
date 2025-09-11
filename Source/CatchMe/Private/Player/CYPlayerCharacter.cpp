@@ -320,21 +320,21 @@ void ACYPlayerCharacter::UseInventoryItem(int32 SlotIndex)
     ACYItemBase* Item = Inventory[SlotIndex];
     UE_LOG(LogTemp, Warning, TEXT("Using item: %s"), *Item->ItemName.ToString());
     
-    // 아이템 사용 로직 (트랩 등)
     if (Item->ItemAbility && AbilitySystemComponent)
     {
         UE_LOG(LogTemp, Warning, TEXT("Item has ability, trying to find spec"));
         
-        // 어빌리티가 있는 아이템의 경우 어빌리티 실행
         FGameplayAbilitySpec* Spec = AbilitySystemComponent->FindAbilitySpecFromClass(Item->ItemAbility);
         if (Spec)
         {
+            // ✅ SourceObject를 아이템으로 설정
+            Spec->SourceObject = Item;
+            
             UE_LOG(LogTemp, Warning, TEXT("Found ability spec, trying to activate"));
             bool bSuccess = AbilitySystemComponent->TryActivateAbility(Spec->Handle);
             UE_LOG(LogTemp, Warning, TEXT("Ability activation result: %s"), 
                    bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
             
-            // 일회용 아이템인 경우 제거 (트랩에 태그 추가 필요)
             if (Item->ItemTag.MatchesTag(FGameplayTag::RequestGameplayTag("Item.Consumable")) ||
                 Item->ItemTag.MatchesTag(FGameplayTag::RequestGameplayTag("Item.Trap")))
             {

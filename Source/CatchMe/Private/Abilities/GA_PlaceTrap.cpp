@@ -91,12 +91,24 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     
     if (ACYTrapBase* Trap = GetWorld()->SpawnActor<ACYTrapBase>(TrapClass, SpawnLocation, SpawnRotation, SpawnParams))
     {
+        // ✅ 어빌리티 스펙에서 소스 오브젝트 가져오기
+        if (const FGameplayAbilitySpec* CurrentSpec = GetCurrentAbilitySpec())
+        {
+            if (CurrentSpec->SourceObject.IsValid())
+            {
+                if (ACYItemBase* UsedItem = Cast<ACYItemBase>(CurrentSpec->SourceObject.Get()))
+                {
+                    if (UsedItem->DesiredTrapEffects.Num() > 0)
+                    {
+                        Trap->ItemEffects = UsedItem->DesiredTrapEffects;
+                        UE_LOG(LogTemp, Warning, TEXT("Applied %d custom effects to trap"), UsedItem->DesiredTrapEffects.Num());
+                    }
+                }
+            }
+        }
+	
         UE_LOG(LogTemp, Warning, TEXT("SUCCESS: Trap placed at %s by %s"), 
-           *SpawnLocation.ToString(), *PlayerCharacter->GetName());
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("FAILED: Could not spawn trap actor"));
+               *SpawnLocation.ToString(), *PlayerCharacter->GetName());
     }
 
     // 쿨다운 적용

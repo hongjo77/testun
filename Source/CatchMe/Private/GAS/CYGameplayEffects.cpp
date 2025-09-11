@@ -38,7 +38,7 @@ UGE_SlowTrap::UGE_SlowTrap()
     FGameplayModifierInfo MoveSpeedModifier;
     MoveSpeedModifier.Attribute = UCYAttributeSet::GetMoveSpeedAttribute();
     MoveSpeedModifier.ModifierOp = EGameplayModOp::Override;
-    MoveSpeedModifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(200.0f); // 느림
+    MoveSpeedModifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(50.0f); // 느림
     
     Modifiers.Add(MoveSpeedModifier);
 }

@@ -4,6 +4,7 @@
 #include "AbilitySystemComponent.h"
 #include "GameplayEffect.h"
 #include "GameplayEffectExtension.h"
+#include "Components/CYWeaponComponent.h"
 #include "GAS/CYAttributeSet.h"
 #include "GAS/CYGameplayEffects.h"  // ← 추가 필요
 
@@ -61,12 +62,15 @@ void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
 void UGA_WeaponAttack::PerformAttack()
 {
-    ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetAvatarActorFromActorInfo());
-    if (!PlayerCharacter) return;
+    AActor* OwnerActor = GetAvatarActorFromActorInfo();
+    if (!OwnerActor) return;
+
+    UCYWeaponComponent* WeaponComp = OwnerActor->FindComponentByClass<UCYWeaponComponent>();
+    if (!WeaponComp) return;
 
     // 라인 트레이스로 타겟 찾기
     FHitResult HitResult;
-    if (PlayerCharacter->PerformLineTrace(HitResult))
+    if (WeaponComp->PerformLineTrace(HitResult))
     {
         if (AActor* Target = HitResult.GetActor())
         {

@@ -27,6 +27,8 @@ ACYTrapBase::ACYTrapBase()
         ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         ItemMesh->SetVisibility(true);
     }
+
+    ItemEffects.Add(UGE_ImmobilizeTrap::StaticClass());
 }
 
 void ACYTrapBase::BeginPlay()
