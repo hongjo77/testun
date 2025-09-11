@@ -4,7 +4,16 @@
 #include "GameplayEffect.h"
 #include "CYGameplayEffects.generated.h"
 
-// 트랩 이동 제한 효과
+UCLASS()
+class CATCHME_API UGE_MovementModifier : public UGameplayEffect
+{
+	GENERATED_BODY()
+
+public:
+	UGE_MovementModifier();
+};
+
+// 기존 효과들은 그대로 유지
 UCLASS()
 class CATCHME_API UGE_ImmobilizeTrap : public UGameplayEffect
 {

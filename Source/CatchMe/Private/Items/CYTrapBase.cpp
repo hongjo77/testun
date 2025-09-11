@@ -4,6 +4,8 @@
 #include "AbilitySystemComponent.h"
 #include "TimerManager.h"
 #include "Components/SphereComponent.h"
+#include "GAS/CYAttributeSet.h"
+#include "GAS/CYGameplayEffects.h"
 
 ACYTrapBase::ACYTrapBase()
 {
@@ -13,6 +15,20 @@ ACYTrapBase::ACYTrapBase()
 
     // 트랩은 픽업 불가
     InteractionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    
+    if (ItemMesh)
+    {
+        static ConstructorHelpers::FObjectFinder<UStaticMesh> TrapMeshAsset(TEXT("/Engine/BasicShapes/Cylinder"));
+        if (TrapMeshAsset.Succeeded())
+        {
+            ItemMesh->SetStaticMesh(TrapMeshAsset.Object);
+            ItemMesh->SetWorldScale3D(FVector(0.5f, 0.5f, 0.1f));
+        }
+        ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        ItemMesh->SetVisibility(true);
+    }
+    
+    TrapEffectClass = UGE_ImmobilizeTrap::StaticClass();
 }
 
 void ACYTrapBase::BeginPlay()
@@ -21,10 +37,7 @@ void ACYTrapBase::BeginPlay()
 
     if (HasAuthority())
     {
-        // 활성화 딜레이
         GetWorld()->GetTimerManager().SetTimer(ArmingTimer, this, &ACYTrapBase::ArmTrap, ArmingDelay, false);
-
-        // 수명 타이머
         GetWorld()->GetTimerManager().SetTimer(LifetimeTimer, [this]()
         {
             Destroy();
@@ -36,48 +49,111 @@ void ACYTrapBase::ArmTrap()
 {
     bIsArmed = true;
 
-    // 트리거 콜리전 생성 및 설정
-    if (USphereComponent* TriggerSphere = NewObject<USphereComponent>(this))
+    // 기존 InteractionSphere를 트리거로 재사용하거나 새로 생성
+    if (!InteractionSphere)
     {
-        TriggerSphere->RegisterComponent();
-        TriggerSphere->AttachToComponent(RootComponent, FAttachmentTransformRules::SnapToTargetIncludingScale);
-        TriggerSphere->SetSphereRadius(TriggerRadius);
-        TriggerSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-        TriggerSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
-        TriggerSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-        
-        TriggerSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnTrapTriggered);
+        InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("TriggerSphere"));
+        InteractionSphere->SetupAttachment(RootComponent);
     }
+    
+    // 트리거 설정
+    InteractionSphere->SetSphereRadius(TriggerRadius);
+    InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+    InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+    
+    // 기존 델리게이트 제거 후 트랩 트리거 바인딩
+    InteractionSphere->OnComponentBeginOverlap.Clear();
+    InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnTrapTriggered);
 
-    UE_LOG(LogTemp, Warning, TEXT("Trap armed!"));
+    UE_LOG(LogTemp, Warning, TEXT("Trap armed at location: %s"), *GetActorLocation().ToString());
 }
 
 void ACYTrapBase::OnTrapTriggered(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
     UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
     bool bFromSweep, const FHitResult& SweepResult)
 {
+    UE_LOG(LogTemp, Warning, TEXT("Trap triggered by: %s"), OtherActor ? *OtherActor->GetName() : TEXT("NULL"));
+    
     if (!bIsArmed || !HasAuthority()) return;
-
-    // 자기 자신이나 같은 팀은 무시
     if (OtherActor == GetOwner()) return;
 
     ACYPlayerCharacter* Target = Cast<ACYPlayerCharacter>(OtherActor);
     if (!Target) return;
 
     UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
-    if (!TargetASC || !TrapEffectClass) return;
+    if (!TargetASC) return;
 
-    // 트랩 효과 적용
-    FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
-    EffectContext.AddSourceObject(this);
-    
-    FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(TrapEffectClass, 1, EffectContext);
-    if (EffectSpec.IsValid())
+    // ✅ 커스텀 설정 사용 여부 확인
+    if (bUseCustomMovement)
     {
-        TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
-        UE_LOG(LogTemp, Warning, TEXT("Trap triggered on %s"), *Target->GetName());
+        ApplyCustomMovementEffect(TargetASC);
+    }
+    else
+    {
+        // 기존 방식: ItemEffects 또는 TrapEffectClass
+        if (ItemEffects.Num() > 0)
+        {
+            for (TSubclassOf<UGameplayEffect> EffectClass : ItemEffects)
+            {
+                if (EffectClass)
+                {
+                    FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
+                    EffectContext.AddSourceObject(this);
+                    
+                    FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(EffectClass, 1, EffectContext);
+                    if (EffectSpec.IsValid())
+                    {
+                        TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
+                        UE_LOG(LogTemp, Warning, TEXT("Default effect applied"));
+                    }
+                }
+            }
+        }
+        else if (TrapEffectClass)
+        {
+            FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
+            EffectContext.AddSourceObject(this);
+            
+            FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(TrapEffectClass, 1, EffectContext);
+            if (EffectSpec.IsValid())
+            {
+                TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
+                UE_LOG(LogTemp, Warning, TEXT("TrapEffectClass applied"));
+            }
+        }
     }
 
-    // 트랩 제거
+    UE_LOG(LogTemp, Warning, TEXT("Destroying trap"));
     Destroy();
+}
+
+void ACYTrapBase::ApplyCustomMovementEffect(UAbilitySystemComponent* TargetASC)
+{
+    // ✅ const_cast로 Cast 오류 해결
+    if (const UAttributeSet* AttributeSetConst = TargetASC->GetAttributeSet(UCYAttributeSet::StaticClass()))
+    {
+        UCYAttributeSet* AttributeSet = const_cast<UCYAttributeSet*>(Cast<UCYAttributeSet>(AttributeSetConst));
+        if (AttributeSet)
+        {
+            // 현재 속도 백업
+            float OriginalSpeed = AttributeSet->GetMoveSpeed();
+            
+            // 즉시 이동속도 변경
+            AttributeSet->SetMoveSpeed(CustomMoveSpeed);
+            
+            UE_LOG(LogTemp, Warning, TEXT("Custom movement: Speed changed to %f for %f seconds"), CustomMoveSpeed, CustomDuration);
+            
+            // 타이머로 원래 속도 복구
+            FTimerHandle RestoreTimer;
+            GetWorld()->GetTimerManager().SetTimer(RestoreTimer, [AttributeSet, OriginalSpeed]()
+            {
+                if (IsValid(AttributeSet))
+                {
+                    AttributeSet->SetMoveSpeed(OriginalSpeed);
+                    UE_LOG(LogTemp, Warning, TEXT("Movement speed restored to %f"), OriginalSpeed);
+                }
+            }, CustomDuration, false);
+        }
+    }
 }

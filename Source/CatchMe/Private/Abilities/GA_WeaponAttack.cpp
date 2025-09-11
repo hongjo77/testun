@@ -11,6 +11,7 @@ UGA_WeaponAttack::UGA_WeaponAttack()
 {
     // 인스턴스 정책 설정
     InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
+    NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
     // 태그 설정 (warning 무시)
     #pragma warning(push)
@@ -29,30 +30,38 @@ void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     const FGameplayAbilityActivationInfo ActivationInfo,
     const FGameplayEventData* TriggerEventData)
 {
+    UE_LOG(LogTemp, Warning, TEXT("UGA_WeaponAttack::ActivateAbility called"));
+    
     if (!HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
     {
+        UE_LOG(LogTemp, Warning, TEXT("WeaponAttack: No authority or prediction key - ending ability"));
         EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
         return;
     }
 
-    // ✅ 쿨다운 체크 - C++ 클래스 직접 사용
+    UE_LOG(LogTemp, Warning, TEXT("WeaponAttack: Authority check passed"));
+
+    // 쿨다운 체크 - C++ 클래스 직접 사용
     const FGameplayTagContainer* CooldownTags = GetCooldownTags();
     if (CooldownTags && ActorInfo->AbilitySystemComponent->HasAnyMatchingGameplayTags(*CooldownTags))
     {
+        UE_LOG(LogTemp, Warning, TEXT("WeaponAttack: On cooldown - ending ability"));
         EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
         return;
     }
 
+    UE_LOG(LogTemp, Warning, TEXT("WeaponAttack: Performing attack"));
     // 공격 수행
     PerformAttack();
 
-    // ✅ 쿨다운 적용 - C++ 클래스 직접 사용
+    // 쿨다운 적용
     FGameplayEffectSpecHandle CooldownSpec = MakeOutgoingGameplayEffectSpec(UGE_WeaponAttackCooldown::StaticClass(), 1);
     if (CooldownSpec.IsValid())
     {
         ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CooldownSpec);
     }
 
+    UE_LOG(LogTemp, Warning, TEXT("WeaponAttack: Ability completed"));
     EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }
 

@@ -12,7 +12,7 @@ class CATCHME_API UGA_PlaceTrap : public UGameplayAbility
 public:
 	UGA_PlaceTrap();
 
-	UPROPERTY(EditDefaultsOnly, Category = "Trap")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Trap")
 	TSubclassOf<class ACYTrapBase> TrapClass;
 
 protected:

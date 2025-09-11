@@ -103,6 +103,8 @@ void ACYPlayerController::InteractPressed()
 
 void ACYPlayerController::AttackPressed()
 {
+    UE_LOG(LogTemp, Warning, TEXT("PlayerController::AttackPressed"));
+    
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
         PlayerCharacter->AttackPressed();
@@ -122,6 +124,8 @@ void ACYPlayerController::UseInventorySlot9() { UseInventorySlot(8); }
 
 void ACYPlayerController::UseInventorySlot(int32 SlotIndex)
 {
+    UE_LOG(LogTemp, Warning, TEXT("PlayerController::UseInventorySlot %d"), SlotIndex);
+    
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
         PlayerCharacter->ServerUseInventoryItem(SlotIndex);

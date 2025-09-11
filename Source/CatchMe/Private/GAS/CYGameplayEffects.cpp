@@ -1,23 +1,33 @@
 ﻿#include "GAS/CYGameplayEffects.h"
 #include "GAS/CYAttributeSet.h"
 
+// 커스텀 이동속도 조절 효과
+UGE_MovementModifier::UGE_MovementModifier()
+{
+    DurationPolicy = EGameplayEffectDurationType::HasDuration;
+    DurationMagnitude = FGameplayEffectModifierMagnitude(5.0f); // 기본 5초
+    
+    // 이동속도 수정자 - 백분율 방식
+    FGameplayModifierInfo MoveSpeedModifier;
+    MoveSpeedModifier.Attribute = UCYAttributeSet::GetMoveSpeedAttribute();
+    MoveSpeedModifier.ModifierOp = EGameplayModOp::Override; // Override 사용
+    MoveSpeedModifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(0.0f); // 기본값 (커스텀에서 설정)
+    
+    Modifiers.Add(MoveSpeedModifier);
+}
+
+// 기존 완전 정지 트랩 (백업용)
 UGE_ImmobilizeTrap::UGE_ImmobilizeTrap()
 {
-    // 기본 설정
     DurationPolicy = EGameplayEffectDurationType::HasDuration;
-    DurationMagnitude = FGameplayEffectModifierMagnitude(5.0f); // 5초
+    DurationMagnitude = FGameplayEffectModifierMagnitude(5.0f);
     
-    // 이동속도를 0으로 설정하는 Modifier 추가
     FGameplayModifierInfo MoveSpeedModifier;
     MoveSpeedModifier.Attribute = UCYAttributeSet::GetMoveSpeedAttribute();
     MoveSpeedModifier.ModifierOp = EGameplayModOp::Override;
-    MoveSpeedModifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(0.0f);
+    MoveSpeedModifier.ModifierMagnitude = FGameplayEffectModifierMagnitude(0.0f); // 완전 정지
     
     Modifiers.Add(MoveSpeedModifier);
-    
-    // 태그 설정 (태그가 있을 때만)
-    // InheritableOwnedTagsContainer.AddTag(FGameplayTag::RequestGameplayTag("Effect.Debuff.Immobilize"));
-    // InheritableGrantedTagsContainer.AddTag(FGameplayTag::RequestGameplayTag("State.Immobilized"));
 }
 
 UGE_WeaponDamage::UGE_WeaponDamage()

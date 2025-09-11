@@ -171,12 +171,21 @@ void ACYPlayerCharacter::InteractPressed()
 
 void ACYPlayerCharacter::AttackPressed()
 {
+    UE_LOG(LogTemp, Warning, TEXT("AttackPressed called"));
+    
     if (CurrentWeapon && AbilitySystemComponent)
     {
-        // 무기 공격 어빌리티 실행
-        AbilitySystemComponent->TryActivateAbilityByTag(
-            FGameplayTag::RequestGameplayTag("Ability.Weapon.Attack")
-        );
+        UE_LOG(LogTemp, Warning, TEXT("Trying to activate weapon attack ability"));
+        
+        FGameplayTag AttackTag = FGameplayTag::RequestGameplayTag("Ability.Weapon.Attack");
+        bool bSuccess = AbilitySystemComponent->TryActivateAbilityByTag(AttackTag);
+        
+        UE_LOG(LogTemp, Warning, TEXT("Weapon attack ability activation result: %s"), 
+               bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No current weapon or ability system component"));
     }
 }
 
@@ -288,28 +297,59 @@ int32 ACYPlayerCharacter::FindEmptyInventorySlot() const
 
 void ACYPlayerCharacter::UseInventoryItem(int32 SlotIndex)
 {
-    if (!HasAuthority()) return;
+    UE_LOG(LogTemp, Warning, TEXT("UseInventoryItem called with slot: %d"), SlotIndex);
+    
+    if (!HasAuthority()) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("UseInventoryItem: No authority"));
+        return;
+    }
 
-    if (SlotIndex < 0 || SlotIndex >= Inventory.Num()) return;
-    if (!Inventory[SlotIndex]) return;
+    if (SlotIndex < 0 || SlotIndex >= Inventory.Num()) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("UseInventoryItem: Invalid slot index"));
+        return;
+    }
+    
+    if (!Inventory[SlotIndex]) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("UseInventoryItem: No item in slot"));
+        return;
+    }
 
     ACYItemBase* Item = Inventory[SlotIndex];
+    UE_LOG(LogTemp, Warning, TEXT("Using item: %s"), *Item->ItemName.ToString());
     
     // 아이템 사용 로직 (트랩 등)
     if (Item->ItemAbility && AbilitySystemComponent)
     {
+        UE_LOG(LogTemp, Warning, TEXT("Item has ability, trying to find spec"));
+        
         // 어빌리티가 있는 아이템의 경우 어빌리티 실행
         FGameplayAbilitySpec* Spec = AbilitySystemComponent->FindAbilitySpecFromClass(Item->ItemAbility);
         if (Spec)
         {
-            AbilitySystemComponent->TryActivateAbility(Spec->Handle);
+            UE_LOG(LogTemp, Warning, TEXT("Found ability spec, trying to activate"));
+            bool bSuccess = AbilitySystemComponent->TryActivateAbility(Spec->Handle);
+            UE_LOG(LogTemp, Warning, TEXT("Ability activation result: %s"), 
+                   bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
             
-            // 일회용 아이템인 경우 제거
-            if (Item->ItemTag.MatchesTag(FGameplayTag::RequestGameplayTag("Item.Consumable")))
+            // 일회용 아이템인 경우 제거 (트랩에 태그 추가 필요)
+            if (Item->ItemTag.MatchesTag(FGameplayTag::RequestGameplayTag("Item.Consumable")) ||
+                Item->ItemTag.MatchesTag(FGameplayTag::RequestGameplayTag("Item.Trap")))
             {
+                UE_LOG(LogTemp, Warning, TEXT("Removing consumable/trap item from inventory"));
                 Inventory[SlotIndex] = nullptr;
             }
         }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Could not find ability spec for item"));
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Item has no ability or no ASC"));
     }
 }
 
