@@ -1,4 +1,6 @@
 #include "Items/CYWeaponBase.h"
+
+#include "CYGameplayTags.h"
 #include "Player/CYPlayerCharacter.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SphereComponent.h"
@@ -9,9 +11,9 @@ ACYWeaponBase::ACYWeaponBase()
     // 기본 무기 설정
     ItemName = FText::FromString("Base Weapon");
     ItemDescription = FText::FromString("A basic weapon");
-    
     // 무기 태그 설정
-    ItemTag = FGameplayTag::RequestGameplayTag("Item.Weapon");
+    const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
+    ItemTag = GameplayTags.Item_Weapon;
 }
 
 void ACYWeaponBase::OnPickup(ACYPlayerCharacter* Character)

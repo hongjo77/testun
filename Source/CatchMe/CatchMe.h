@@ -3,6 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Modules/ModuleInterface.h"
 
 /** Main log category used across the project */
 DECLARE_LOG_CATEGORY_EXTERN(LogCatchMe, Log, All);
+
+class FCatchMeModule : public IModuleInterface
+{
+public:
+	virtual void StartupModule() override;
+	virtual void ShutdownModule() override;
+};

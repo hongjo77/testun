@@ -1,20 +1,25 @@
 ﻿#include "Abilities/GA_PlaceTrap.h"
-#include "Player/CYPlayerCharacter.h"
 #include "Items/CYTrapBase.h"
 #include "Engine/World.h"
 #include "GAS/CYAbilitySystemComponent.h"
 #include "GAS/CYGameplayEffects.h"
+#include "CYGameplayTags.h"
+#include "Camera/CameraComponent.h"
+#include "Components/CYWeaponComponent.h"
 
 UGA_PlaceTrap::UGA_PlaceTrap()
 {
-	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
-	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+    InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
+    NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
     TrapClass = ACYTrapBase::StaticClass();
     
-    AbilityTags.AddTag(FGameplayTag::RequestGameplayTag("Ability.Trap.Place"));
-    ActivationBlockedTags.AddTag(FGameplayTag::RequestGameplayTag("State.Stunned"));
-    ActivationBlockedTags.AddTag(FGameplayTag::RequestGameplayTag("State.Dead"));
+    // ✅ 중앙집중식 태그 사용
+    const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
+    
+    AbilityTags.AddTag(GameplayTags.Ability_Trap_Place);
+    ActivationBlockedTags.AddTag(GameplayTags.State_Stunned);
+    ActivationBlockedTags.AddTag(GameplayTags.State_Dead);
 }
 
 void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -33,15 +38,15 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
     UE_LOG(LogTemp, Warning, TEXT("PlaceTrap: Authority check passed"));
 
-    ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetAvatarActorFromActorInfo());
+    // ✅ PlayerCharacter 대신 일반 Actor 사용
+    AActor* OwnerActor = GetAvatarActorFromActorInfo();
     
-    // 디버깅 로그 추가
-    UE_LOG(LogTemp, Warning, TEXT("PlayerCharacter: %s"), PlayerCharacter ? TEXT("Valid") : TEXT("NULL"));
+    UE_LOG(LogTemp, Warning, TEXT("OwnerActor: %s"), OwnerActor ? TEXT("Valid") : TEXT("NULL"));
     UE_LOG(LogTemp, Warning, TEXT("TrapClass: %s"), TrapClass ? TEXT("Valid") : TEXT("NULL"));
     
-    if (!PlayerCharacter)
+    if (!OwnerActor)
     {
-        UE_LOG(LogTemp, Error, TEXT("PlaceTrap: PlayerCharacter is NULL"));
+        UE_LOG(LogTemp, Error, TEXT("PlaceTrap: OwnerActor is NULL"));
         EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
         return;
     }
@@ -62,36 +67,39 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
         return;
     }
 
-    // 트랩 설치 위치 계산
+    // ✅ 트랩 설치 위치 계산 - WeaponComponent 사용 또는 직접 라인트레이스
     FHitResult HitResult;
     FVector SpawnLocation;
     
-    if (PlayerCharacter->PerformLineTrace(HitResult, 300.0f))
+    // WeaponComponent를 찾아서 라인트레이스 시도
+    UCYWeaponComponent* WeaponComp = OwnerActor->FindComponentByClass<UCYWeaponComponent>();
+    if (WeaponComp && WeaponComp->PerformLineTrace(HitResult, 300.0f))
     {
         SpawnLocation = HitResult.Location;
         UE_LOG(LogTemp, Warning, TEXT("Trap spawn location (line trace): %s"), *SpawnLocation.ToString());
     }
     else
     {
-        SpawnLocation = PlayerCharacter->GetActorLocation() + 
-                    PlayerCharacter->GetActorForwardVector() * 200.0f;
-        SpawnLocation.Z = PlayerCharacter->GetActorLocation().Z;
+        // 라인트레이스 실패시 앞쪽에 배치
+        SpawnLocation = OwnerActor->GetActorLocation() + 
+                    OwnerActor->GetActorForwardVector() * 200.0f;
+        SpawnLocation.Z = OwnerActor->GetActorLocation().Z;
         UE_LOG(LogTemp, Warning, TEXT("Trap spawn location (forward): %s"), *SpawnLocation.ToString());
     }
 
-    FRotator SpawnRotation = PlayerCharacter->GetActorRotation();
+    FRotator SpawnRotation = OwnerActor->GetActorRotation();
 
     // 트랩 스폰
     FActorSpawnParameters SpawnParams;
-    SpawnParams.Owner = PlayerCharacter;
-    SpawnParams.Instigator = PlayerCharacter;
+    SpawnParams.Owner = OwnerActor;
+    SpawnParams.Instigator = Cast<APawn>(OwnerActor);
     SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
     UE_LOG(LogTemp, Warning, TEXT("Attempting to spawn trap..."));
     
     if (ACYTrapBase* Trap = GetWorld()->SpawnActor<ACYTrapBase>(TrapClass, SpawnLocation, SpawnRotation, SpawnParams))
     {
-        // ✅ 어빌리티 스펙에서 소스 오브젝트 가져오기
+        // 소스 오브젝트에서 원하는 효과 가져오기
         if (const FGameplayAbilitySpec* CurrentSpec = GetCurrentAbilitySpec())
         {
             if (CurrentSpec->SourceObject.IsValid())
@@ -106,9 +114,13 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
                 }
             }
         }
-	
+    
         UE_LOG(LogTemp, Warning, TEXT("SUCCESS: Trap placed at %s by %s"), 
-               *SpawnLocation.ToString(), *PlayerCharacter->GetName());
+               *SpawnLocation.ToString(), *OwnerActor->GetName());
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("FAILED: Could not spawn trap actor"));
     }
 
     // 쿨다운 적용

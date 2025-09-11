@@ -1,18 +1,17 @@
 ﻿#include "Abilities/GA_WeaponAttack.h"
 #include "AbilitySystemBlueprintLibrary.h"
-#include "Player/CYPlayerCharacter.h"
 #include "AbilitySystemComponent.h"
-#include "GameplayEffect.h"
-#include "GameplayEffectExtension.h"
 #include "Components/CYWeaponComponent.h"
 #include "GAS/CYAttributeSet.h"
-#include "GAS/CYGameplayEffects.h"  // ← 추가 필요
+#include "GAS/CYGameplayEffects.h"
+#include "CYGameplayTags.h"
 
 UGA_WeaponAttack::UGA_WeaponAttack()
 {
-    // 인스턴스 정책 설정
     InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
     NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+
+    const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
 
     AbilityTags.AddTag(FGameplayTag::RequestGameplayTag("Ability.Weapon.Attack"));
     ActivationOwnedTags.AddTag(FGameplayTag::RequestGameplayTag("State.Attacking"));
@@ -36,7 +35,6 @@ void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
     UE_LOG(LogTemp, Warning, TEXT("WeaponAttack: Authority check passed"));
 
-    // 쿨다운 체크 - C++ 클래스 직접 사용
     const FGameplayTagContainer* CooldownTags = GetCooldownTags();
     if (CooldownTags && ActorInfo->AbilitySystemComponent->HasAnyMatchingGameplayTags(*CooldownTags))
     {
@@ -46,10 +44,8 @@ void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     }
 
     UE_LOG(LogTemp, Warning, TEXT("WeaponAttack: Performing attack"));
-    // 공격 수행
     PerformAttack();
 
-    // 쿨다운 적용
     FGameplayEffectSpecHandle CooldownSpec = MakeOutgoingGameplayEffectSpec(UGE_WeaponAttackCooldown::StaticClass(), 1);
     if (CooldownSpec.IsValid())
     {
@@ -68,18 +64,15 @@ void UGA_WeaponAttack::PerformAttack()
     UCYWeaponComponent* WeaponComp = OwnerActor->FindComponentByClass<UCYWeaponComponent>();
     if (!WeaponComp) return;
 
-    // 라인 트레이스로 타겟 찾기
     FHitResult HitResult;
     if (WeaponComp->PerformLineTrace(HitResult))
     {
         if (AActor* Target = HitResult.GetActor())
         {
-            // 타겟이 GAS를 가지고 있는지 확인
             UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
             if (TargetASC)
             {
-                // 데미지 계산
-                float Damage = 50.0f;  // 기본 데미지
+                float Damage = 50.0f;
                 
                 if (UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo())
                 {
@@ -90,21 +83,13 @@ void UGA_WeaponAttack::PerformAttack()
                     }
                 }
 
-                // ✅ C++로 만든 데미지 GameplayEffect 사용
                 FGameplayEffectContextHandle EffectContext = GetAbilitySystemComponentFromActorInfo()->MakeEffectContext();
-                EffectContext.AddSourceObject(PlayerCharacter);
+                EffectContext.AddSourceObject(OwnerActor);
                 EffectContext.AddHitResult(HitResult);
 
                 FGameplayEffectSpecHandle DamageSpec = MakeOutgoingGameplayEffectSpec(UGE_WeaponDamage::StaticClass(), 1);
                 if (DamageSpec.IsValid())
                 {
-                    // SetByCaller로 데미지 설정 (음수로 체력 감소)
-                    DamageSpec.Data.Get()->SetSetByCallerMagnitude(
-                        FGameplayTag::RequestGameplayTag("Data.Damage"), 
-                        -Damage  // 음수로 체력 감소
-                    );
-
-                    // 타겟에 데미지 적용
                     GetAbilitySystemComponentFromActorInfo()->ApplyGameplayEffectSpecToTarget(
                         *DamageSpec.Data.Get(),
                         TargetASC

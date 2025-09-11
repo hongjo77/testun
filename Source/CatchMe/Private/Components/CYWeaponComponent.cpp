@@ -7,6 +7,9 @@
 #include "GameFramework/Character.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SphereComponent.h"
+#include "GAS/CYAbilitySystemComponent.h"
+#include "Components/CYInventoryComponent.h" // ✅ 추가
+#include "CYGameplayTags.h"
 #include "Net/UnrealNetwork.h"
 
 UCYWeaponComponent::UCYWeaponComponent()
@@ -25,7 +28,6 @@ bool UCYWeaponComponent::EquipWeapon(ACYWeaponBase* Weapon)
 {
     if (!Weapon || !GetOwner()->HasAuthority()) return false;
 
-    // 기존 무기 해제
     if (CurrentWeapon)
     {
         UnequipWeapon();
@@ -33,7 +35,6 @@ bool UCYWeaponComponent::EquipWeapon(ACYWeaponBase* Weapon)
 
     CurrentWeapon = Weapon;
     
-    // 무기 장착
     USkeletalMeshComponent* OwnerMesh = GetOwnerMesh();
     if (OwnerMesh)
     {
@@ -44,7 +45,6 @@ bool UCYWeaponComponent::EquipWeapon(ACYWeaponBase* Weapon)
         );
     }
 
-    // 충돌 비활성화
     if (Weapon->ItemMesh)
     {
         Weapon->ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -64,7 +64,6 @@ bool UCYWeaponComponent::UnequipWeapon()
 
     ACYWeaponBase* OldWeapon = CurrentWeapon;
     
-    // 무기 분리
     CurrentWeapon->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
     CurrentWeapon = nullptr;
 
@@ -74,19 +73,32 @@ bool UCYWeaponComponent::UnequipWeapon()
 
 bool UCYWeaponComponent::PerformAttack()
 {
-    if (!CurrentWeapon) return false;
+    // ✅ 공격 전에 항상 인벤토리 상태 출력
+    if (UCYInventoryComponent* InventoryComp = GetOwner()->FindComponentByClass<UCYInventoryComponent>())
+    {
+        InventoryComp->PrintInventoryStatus();
+    }
+
+    if (!CurrentWeapon) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("무기가 장착되지 않음"));
+        return false;
+    }
 
     UAbilitySystemComponent* ASC = GetOwnerASC();
     if (!ASC) return false;
 
-    // 무기 공격 어빌리티 실행
-    FGameplayTag AttackTag = FGameplayTag::RequestGameplayTag("Ability.Weapon.Attack");
-    return ASC->TryActivateAbilityByTag(AttackTag);
+    if (UCYAbilitySystemComponent* CYasc = Cast<UCYAbilitySystemComponent>(ASC))
+    {
+        const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
+        return CYasc->TryActivateAbilityByTag(GameplayTags.Ability_Weapon_Attack);
+    }
+
+    return false;
 }
 
 bool UCYWeaponComponent::PerformLineTrace(FHitResult& OutHit, float Range)
 {
-    // 카메라 컴포넌트 찾기
     UCameraComponent* Camera = GetOwner()->FindComponentByClass<UCameraComponent>();
     if (!Camera) return false;
 
@@ -105,7 +117,6 @@ void UCYWeaponComponent::OnRep_CurrentWeapon()
 {
     OnWeaponChanged.Broadcast(nullptr, CurrentWeapon);
     
-    // 클라이언트에서 무기 장착 처리
     if (CurrentWeapon)
     {
         USkeletalMeshComponent* OwnerMesh = GetOwnerMesh();

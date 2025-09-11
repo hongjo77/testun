@@ -73,6 +73,17 @@ public:
     UFUNCTION(Server, Reliable)
     void ServerPickup(ACYPlayerCharacter* Character);
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item", Replicated)
+    int32 ItemCount = 1;
+
+    // 최대 스택 수량
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Item")
+    int32 MaxStackCount = 10;
+
+    // 스택 가능한 아이템인지 체크
+    UFUNCTION(BlueprintCallable, Category = "Item")
+    bool CanStackWith(ACYItemBase* OtherItem) const;
+
 protected:
     virtual void BeginPlay() override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;

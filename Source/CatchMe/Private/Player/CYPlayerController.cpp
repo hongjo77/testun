@@ -62,7 +62,6 @@ void ACYPlayerController::SetupInputComponent()
 
 void ACYPlayerController::Move(const FInputActionValue& Value)
 {
-    // ❌ Character → ✅ PlayerCharacter (변수명 변경)
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
         PlayerCharacter->Move(Value.Get<FVector2D>());
@@ -111,16 +110,16 @@ void ACYPlayerController::AttackPressed()
     }
 }
 
-// 인벤토리 슬롯 함수 구현들
-void ACYPlayerController::UseInventorySlot1() { UseInventorySlot(0); }
-void ACYPlayerController::UseInventorySlot2() { UseInventorySlot(1); }
-void ACYPlayerController::UseInventorySlot3() { UseInventorySlot(2); }
-void ACYPlayerController::UseInventorySlot4() { UseInventorySlot(3); }
-void ACYPlayerController::UseInventorySlot5() { UseInventorySlot(4); }
-void ACYPlayerController::UseInventorySlot6() { UseInventorySlot(5); }
-void ACYPlayerController::UseInventorySlot7() { UseInventorySlot(6); }
-void ACYPlayerController::UseInventorySlot8() { UseInventorySlot(7); }
-void ACYPlayerController::UseInventorySlot9() { UseInventorySlot(8); }
+// ✅ 키 매핑 변경: 1~3번은 무기, 4~9번은 아이템
+void ACYPlayerController::UseInventorySlot1() { UseInventorySlot(1000); } // 무기 슬롯 0
+void ACYPlayerController::UseInventorySlot2() { UseInventorySlot(1001); } // 무기 슬롯 1
+void ACYPlayerController::UseInventorySlot3() { UseInventorySlot(1002); } // 무기 슬롯 2
+void ACYPlayerController::UseInventorySlot4() { UseInventorySlot(0); }    // 아이템 슬롯 0
+void ACYPlayerController::UseInventorySlot5() { UseInventorySlot(1); }    // 아이템 슬롯 1
+void ACYPlayerController::UseInventorySlot6() { UseInventorySlot(2); }    // 아이템 슬롯 2
+void ACYPlayerController::UseInventorySlot7() { UseInventorySlot(3); }    // 아이템 슬롯 3
+void ACYPlayerController::UseInventorySlot8() { UseInventorySlot(4); }    // 아이템 슬롯 4
+void ACYPlayerController::UseInventorySlot9() { UseInventorySlot(5); }    // 아이템 슬롯 5
 
 void ACYPlayerController::UseInventorySlot(int32 SlotIndex)
 {
@@ -128,6 +127,6 @@ void ACYPlayerController::UseInventorySlot(int32 SlotIndex)
     
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
-        PlayerCharacter->ServerUseInventoryItem(SlotIndex);
+        PlayerCharacter->UseInventorySlot(SlotIndex);
     }
 }

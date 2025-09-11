@@ -1,4 +1,6 @@
 #include "Items/CYItemBase.h"
+
+#include "CYGameplayTags.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Player/CYPlayerCharacter.h"
@@ -32,8 +34,13 @@ ACYItemBase::ACYItemBase()
     InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
     // 기본 아이템 태그
-    ItemTag = FGameplayTag::RequestGameplayTag("Item.Base");
+    const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
+    ItemTag = GameplayTags.Item_Base;
+    
     bIsPickedUp = false;
+
+    ItemCount = 1;
+    MaxStackCount = 10;
 }
 
 void ACYItemBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -41,6 +48,7 @@ void ACYItemBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     
     DOREPLIFETIME(ACYItemBase, bIsPickedUp);
+    DOREPLIFETIME(ACYItemBase, ItemCount); 
 }
 
 void ACYItemBase::BeginPlay()
@@ -185,4 +193,14 @@ void ACYItemBase::OnRep_bIsPickedUp()
         SetActorHiddenInGame(false);
         SetActorEnableCollision(true);
     }
+}
+
+bool ACYItemBase::CanStackWith(ACYItemBase* OtherItem) const
+{
+    if (!OtherItem) return false;
+    
+    // 같은 클래스이고, 스택 가능하며, 최대치 미만인지 체크
+    return (GetClass() == OtherItem->GetClass() && 
+            MaxStackCount > 1 && 
+            OtherItem->ItemCount < OtherItem->MaxStackCount);
 }

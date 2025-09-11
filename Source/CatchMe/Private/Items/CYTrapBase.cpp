@@ -6,12 +6,19 @@
 #include "Components/SphereComponent.h"
 #include "GAS/CYAttributeSet.h"
 #include "GAS/CYGameplayEffects.h"
+#include "CYGameplayTags.h"
 
 ACYTrapBase::ACYTrapBase()
 {
     ItemName = FText::FromString("Trap");
     ItemDescription = FText::FromString("A placeable trap");
-    ItemTag = FGameplayTag::RequestGameplayTag("Item.Trap");
+    
+    const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
+    ItemTag = GameplayTags.Item_Trap;
+
+    // ✅ 트랩은 최대 5개까지 스택 가능
+    MaxStackCount = 5;
+    ItemCount = 1;
 
     // 트랩은 픽업 불가
     InteractionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -84,7 +91,7 @@ void ACYTrapBase::OnTrapTriggered(UPrimitiveComponent* OverlappedComponent, AAct
     UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
     if (!TargetASC) return;
 
-    // ✅ ItemEffects만 사용하는 단순한 로직
+    // ItemEffects 적용
     UE_LOG(LogTemp, Warning, TEXT("ItemEffects count: %d"), ItemEffects.Num());
     
     for (TSubclassOf<UGameplayEffect> EffectClass : ItemEffects)
