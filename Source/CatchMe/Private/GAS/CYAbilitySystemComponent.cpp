@@ -39,7 +39,8 @@ void UCYAbilitySystemComponent::RemoveItemAbility(FGameplayAbilitySpecHandle& Ha
     if (GetOwnerRole() == ROLE_Authority)
     {
         ClearAbility(Handle);
-        Handle.Invalidate();
+        // 핸들 무효화
+        Handle = FGameplayAbilitySpecHandle();
     }
 }
 

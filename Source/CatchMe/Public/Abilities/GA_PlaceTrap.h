@@ -15,9 +15,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Trap")
 	TSubclassOf<class ACYTrapBase> TrapClass;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Effects")
-	TSubclassOf<UGameplayEffect> TrapEffectClass;
-
 protected:
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,

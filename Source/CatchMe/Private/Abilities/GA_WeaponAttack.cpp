@@ -1,26 +1,27 @@
 ﻿#include "Abilities/GA_WeaponAttack.h"
-
 #include "AbilitySystemBlueprintLibrary.h"
 #include "Player/CYPlayerCharacter.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayEffect.h"
 #include "GameplayEffectExtension.h"
 #include "GAS/CYAttributeSet.h"
-#include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
-#include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
+#include "GAS/CYGameplayEffects.h"  // ← 추가 필요
 
 UGA_WeaponAttack::UGA_WeaponAttack()
 {
     // 인스턴스 정책 설정
     InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
 
-    // 태그 설정
+    // 태그 설정 (warning 무시)
+    #pragma warning(push)
+    #pragma warning(disable: 4996)
+    
     AbilityTags.AddTag(FGameplayTag::RequestGameplayTag("Ability.Weapon.Attack"));
     ActivationOwnedTags.AddTag(FGameplayTag::RequestGameplayTag("State.Attacking"));
-    
-    // 블록 태그
     ActivationBlockedTags.AddTag(FGameplayTag::RequestGameplayTag("State.Stunned"));
     ActivationBlockedTags.AddTag(FGameplayTag::RequestGameplayTag("State.Dead"));
+    
+    #pragma warning(pop)
 }
 
 void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -34,28 +35,22 @@ void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
         return;
     }
 
-    // 쿨다운 체크
-    if (CooldownEffectClass)
+    // ✅ 쿨다운 체크 - C++ 클래스 직접 사용
+    const FGameplayTagContainer* CooldownTags = GetCooldownTags();
+    if (CooldownTags && ActorInfo->AbilitySystemComponent->HasAnyMatchingGameplayTags(*CooldownTags))
     {
-        const FGameplayTagContainer* CooldownTags = GetCooldownTags();
-        if (CooldownTags && ActorInfo->AbilitySystemComponent->HasAnyMatchingGameplayTags(*CooldownTags))
-        {
-            EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
-            return;
-        }
+        EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+        return;
     }
 
     // 공격 수행
     PerformAttack();
 
-    // 쿨다운 적용
-    if (CooldownEffectClass)
+    // ✅ 쿨다운 적용 - C++ 클래스 직접 사용
+    FGameplayEffectSpecHandle CooldownSpec = MakeOutgoingGameplayEffectSpec(UGE_WeaponAttackCooldown::StaticClass(), 1);
+    if (CooldownSpec.IsValid())
     {
-        FGameplayEffectSpecHandle CooldownSpec = MakeOutgoingGameplayEffectSpec(CooldownEffectClass, 1);
-        if (CooldownSpec.IsValid())
-        {
-            ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CooldownSpec);
-        }
+        ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CooldownSpec);
     }
 
     EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
@@ -63,42 +58,43 @@ void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
 void UGA_WeaponAttack::PerformAttack()
 {
-    ACYPlayerCharacter* Character = Cast<ACYPlayerCharacter>(GetAvatarActorFromActorInfo());
-    if (!Character) return;
+    ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetAvatarActorFromActorInfo());
+    if (!PlayerCharacter) return;
 
     // 라인 트레이스로 타겟 찾기
     FHitResult HitResult;
-    if (Character->PerformLineTrace(HitResult))
+    if (PlayerCharacter->PerformLineTrace(HitResult))
     {
         if (AActor* Target = HitResult.GetActor())
         {
             // 타겟이 GAS를 가지고 있는지 확인
             UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
-            if (TargetASC && DamageEffectClass)
+            if (TargetASC)
             {
                 // 데미지 계산
-                UCYAttributeSet* SourceAttributes = Cast<UCYAttributeSet>(
-                    GetAbilitySystemComponentFromActorInfo()->GetAttributeSet(UCYAttributeSet::StaticClass())
-                );
-                
                 float Damage = 50.0f;  // 기본 데미지
-                if (SourceAttributes)
+                
+                if (UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo())
                 {
-                    Damage = SourceAttributes->GetAttackPower();
+                    FGameplayAttribute AttackPowerAttribute = UCYAttributeSet::GetAttackPowerAttribute();
+                    if (SourceASC->HasAttributeSetForAttribute(AttackPowerAttribute))
+                    {
+                        Damage = SourceASC->GetNumericAttribute(AttackPowerAttribute);
+                    }
                 }
 
-                // 데미지 이펙트 생성 및 적용
+                // ✅ C++로 만든 데미지 GameplayEffect 사용
                 FGameplayEffectContextHandle EffectContext = GetAbilitySystemComponentFromActorInfo()->MakeEffectContext();
-                EffectContext.AddSourceObject(Character);
+                EffectContext.AddSourceObject(PlayerCharacter);
                 EffectContext.AddHitResult(HitResult);
 
-                FGameplayEffectSpecHandle DamageSpec = MakeOutgoingGameplayEffectSpec(DamageEffectClass, 1);
+                FGameplayEffectSpecHandle DamageSpec = MakeOutgoingGameplayEffectSpec(UGE_WeaponDamage::StaticClass(), 1);
                 if (DamageSpec.IsValid())
                 {
-                    // SetByCaller로 데미지 설정
+                    // SetByCaller로 데미지 설정 (음수로 체력 감소)
                     DamageSpec.Data.Get()->SetSetByCallerMagnitude(
                         FGameplayTag::RequestGameplayTag("Data.Damage"), 
-                        Damage
+                        -Damage  // 음수로 체력 감소
                     );
 
                     // 타겟에 데미지 적용

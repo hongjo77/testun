@@ -14,6 +14,8 @@ class UCYAbilitySystemComponent;
 class UGameplayEffect;
 class UGameplayAbility;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNearbyItemChanged, class ACYItemBase*, NearbyItem);
+
 UCLASS()
 class CATCHME_API ACYPlayerCharacter : public ACharacter, public IAbilitySystemInterface
 {
@@ -39,21 +41,48 @@ public:
     virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
     // Input
+    UFUNCTION(BlueprintCallable, Category = "Input")
     void Move(const FVector2D& Value);
+
+    UFUNCTION(BlueprintCallable, Category = "Input")
     void Look(const FVector2D& Value);
+
+    UFUNCTION(BlueprintCallable, Category = "Input")
     void InteractPressed();
+
+    UFUNCTION(BlueprintCallable, Category = "Input")
     void AttackPressed();
 
     // Item System
-    UFUNCTION(BlueprintCallable, Category = "Item")
-    void PickupItem(class ACYItemBase* Item);
+    UFUNCTION(Server, Reliable, Category = "Item")
+    void ServerPickupItem(ACYItemBase* Item);
 
     UFUNCTION(BlueprintCallable, Category = "Item")
     void EquipWeapon(class ACYWeaponBase* Weapon);
 
+    // Inventory System
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory")
+    int32 InventorySize;
+
+    UPROPERTY(ReplicatedUsing = OnRep_Inventory, BlueprintReadOnly, Category = "Inventory")
+    TArray<ACYItemBase*> Inventory;
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    int32 FindEmptyInventorySlot() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void UseInventoryItem(int32 SlotIndex);
+
+    UFUNCTION(Server, Reliable, Category = "Inventory")
+    void ServerUseInventoryItem(int32 SlotIndex);
+
     // Utility
     UFUNCTION(BlueprintCallable, Category = "Combat")
     bool PerformLineTrace(FHitResult& OutHit, float Range = 1000.0f);
+
+    // Events
+    UPROPERTY(BlueprintAssignable, Category = "Events")
+    FOnNearbyItemChanged OnNearbyItemChanged;
 
 protected:
     virtual void BeginPlay() override;
@@ -80,8 +109,14 @@ protected:
     void OnRep_CurrentWeapon();
 
     // Interaction
-    UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+    UPROPERTY(ReplicatedUsing = OnRep_NearbyItem, BlueprintReadOnly, Category = "Interaction")
     ACYItemBase* NearbyItem;
+
+    UFUNCTION()
+    void OnRep_NearbyItem();
+
+    UFUNCTION()
+    void OnRep_Inventory() { /* UI 업데이트 */ }
 
     void CheckForNearbyItems();
 

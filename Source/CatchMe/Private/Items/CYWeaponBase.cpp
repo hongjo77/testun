@@ -1,6 +1,7 @@
 #include "Items/CYWeaponBase.h"
 #include "Player/CYPlayerCharacter.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/SphereComponent.h"
 #include "Net/UnrealNetwork.h"
 
 ACYWeaponBase::ACYWeaponBase()
@@ -34,7 +35,7 @@ void ACYWeaponBase::Equip(ACYPlayerCharacter* Character)
         AttachToComponent(
             Character->GetMesh(),
             FAttachmentTransformRules::SnapToTargetIncludingScale,
-            TEXT("hand_r_socket")  // 오른손 소켓
+            TEXT("hand_r")  // 오른손 소켓
         );
     }
 

@@ -12,14 +12,6 @@ class CATCHME_API UGA_WeaponAttack : public UGameplayAbility
 public:
 	UGA_WeaponAttack();
 
-	// Damage Effect
-	UPROPERTY(EditDefaultsOnly, Category = "Effects")
-	TSubclassOf<class UGameplayEffect> DamageEffectClass;
-
-	// Cooldown Effect
-	UPROPERTY(EditDefaultsOnly, Category = "Cooldown")
-	TSubclassOf<UGameplayEffect> CooldownEffectClass;
-
 protected:
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,

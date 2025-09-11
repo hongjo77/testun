@@ -4,6 +4,8 @@
 #include "Player/CYPlayerCharacter.h"
 #include "GAS/CYAbilitySystemComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "Engine/Engine.h"
+#include "Items/CYWeaponBase.h"  // Cast 체크용
 
 ACYItemBase::ACYItemBase()
 {
@@ -28,6 +30,17 @@ ACYItemBase::ACYItemBase()
     InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+
+    // 기본 아이템 태그
+    ItemTag = FGameplayTag::RequestGameplayTag("Item.Base");
+    bIsPickedUp = false;
+}
+
+void ACYItemBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    
+    DOREPLIFETIME(ACYItemBase, bIsPickedUp);
 }
 
 void ACYItemBase::BeginPlay()
@@ -37,6 +50,7 @@ void ACYItemBase::BeginPlay()
     if (HasAuthority())
     {
         InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYItemBase::OnSphereOverlap);
+        InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &ACYItemBase::OnSphereEndOverlap);
     }
 }
 
@@ -44,16 +58,37 @@ void ACYItemBase::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AAct
     UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
     bool bFromSweep, const FHitResult& SweepResult)
 {
+    if (bIsPickedUp) return;
+
     if (ACYPlayerCharacter* Character = Cast<ACYPlayerCharacter>(OtherActor))
     {
-        // UI 힌트 표시를 위한 이벤트 (블루프린트에서 처리)
+        // UI 힌트 표시를 위한 이벤트
         UE_LOG(LogTemp, Warning, TEXT("Player near item: %s"), *ItemName.ToString());
+        
+        // 클라이언트에서 UI 업데이트
+        if (Character->IsLocallyControlled())
+        {
+            OnPlayerNearItem.Broadcast(this, true);
+        }
+    }
+}
+
+void ACYItemBase::OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+    UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+    if (ACYPlayerCharacter* Character = Cast<ACYPlayerCharacter>(OtherActor))
+    {
+        // UI 힌트 숨기기
+        if (Character->IsLocallyControlled())
+        {
+            OnPlayerNearItem.Broadcast(this, false);
+        }
     }
 }
 
 void ACYItemBase::OnPickup(ACYPlayerCharacter* Character)
 {
-    if (!Character) return;
+    if (!Character || bIsPickedUp) return;
 
     UCYAbilitySystemComponent* ASC = Cast<UCYAbilitySystemComponent>(Character->GetAbilitySystemComponent());
     if (!ASC) return;
@@ -61,7 +96,7 @@ void ACYItemBase::OnPickup(ACYPlayerCharacter* Character)
     // Grant item ability
     if (ItemAbility)
     {
-        FGameplayAbilitySpecHandle Handle = ASC->GiveItemAbility(ItemAbility, 1);
+        ItemAbilityHandle = ASC->GiveItemAbility(ItemAbility, 1);
         UE_LOG(LogTemp, Warning, TEXT("Granted ability for item: %s"), *ItemName.ToString());
     }
 
@@ -80,18 +115,74 @@ void ACYItemBase::OnPickup(ACYPlayerCharacter* Character)
             }
         }
     }
+
+    // 아이템이 픽업되었음을 표시
+    bIsPickedUp = true;
+    
+    // 픽업 이벤트 발생
+    OnItemPickedUp.Broadcast(this, Character);
+}
+
+void ACYItemBase::OnDrop(ACYPlayerCharacter* Character)
+{
+    if (!Character) return;
+
+    UCYAbilitySystemComponent* ASC = Cast<UCYAbilitySystemComponent>(Character->GetAbilitySystemComponent());
+    if (!ASC) return;
+
+    // Remove item ability
+    if (ItemAbilityHandle.IsValid())
+    {
+        ASC->RemoveItemAbility(ItemAbilityHandle);
+        // FGameplayAbilitySpecHandle을 무효화하는 올바른 방법
+        ItemAbilityHandle = FGameplayAbilitySpecHandle();  // 기본 생성자로 초기화 = 무효한 핸들
+    }
+
+    // 아이템 드랍 로직
+    bIsPickedUp = false;
+    
+    // 충돌 다시 활성화
+    ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    
+    SetActorHiddenInGame(false);
+    
+    // 드랍 이벤트
+    OnItemDropped.Broadcast(this, Character);
 }
 
 void ACYItemBase::ServerPickup_Implementation(ACYPlayerCharacter* Character)
 {
-    if (!HasAuthority() || !Character) return;
+    if (!HasAuthority() || !Character || bIsPickedUp) return;
 
     OnPickup(Character);
 
-    // 아이템 숨기기
-    SetActorHiddenInGame(true);
-    SetActorEnableCollision(false);
+    // 아이템 숨기기 (무기가 아닌 경우에만)
+    if (!IsA<ACYWeaponBase>())
+    {
+        SetActorHiddenInGame(true);
+        SetActorEnableCollision(false);
+        
+        // 일정 시간 후 제거 또는 리스폰
+        SetLifeSpan(2.0f);
+    }
+}
 
-    // 일정 시간 후 제거
-    SetLifeSpan(2.0f);
+void ACYItemBase::OnRep_bIsPickedUp()
+{
+    if (bIsPickedUp)
+    {
+        // 클라이언트에서 아이템 숨기기
+        if (!IsA<ACYWeaponBase>())
+        {
+            SetActorHiddenInGame(true);
+            SetActorEnableCollision(false);
+        }
+    }
+    else
+    {
+        // 아이템이 드랍되었을 때
+        SetActorHiddenInGame(false);
+        SetActorEnableCollision(true);
+    }
 }
