@@ -54,12 +54,17 @@ void ACYPlayerCharacter::BeginPlay()
 
 void ACYPlayerCharacter::PossessedBy(AController* NewController)
 {
+    UE_LOG(LogTemp, Warning, TEXT("=== CYPlayerCharacter::PossessedBy called ==="));
+    UE_LOG(LogTemp, Warning, TEXT("NewController: %s"), NewController ? *NewController->GetClass()->GetName() : TEXT("NULL"));
+    
     Super::PossessedBy(NewController);
 
     if (AbilitySystemComponent)
     {
         InitializeAbilitySystem();
     }
+    
+    UE_LOG(LogTemp, Warning, TEXT("=== CYPlayerCharacter::PossessedBy completed ==="));
 }
 
 void ACYPlayerCharacter::OnRep_PlayerState()

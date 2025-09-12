@@ -11,77 +11,110 @@ ACYPlayerController::ACYPlayerController()
 
 void ACYPlayerController::BeginPlay()
 {
+    UE_LOG(LogTemp, Warning, TEXT("=== CYPlayerController::BeginPlay START ==="));
+    
     Super::BeginPlay();
 
     if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
     {
+        UE_LOG(LogTemp, Warning, TEXT("PlayerController: Found EnhancedInputLocalPlayerSubsystem"));
+        
         if (DefaultMappingContext)
         {
+            UE_LOG(LogTemp, Warning, TEXT("PlayerController: DefaultMappingContext is valid, adding..."));
             Subsystem->AddMappingContext(DefaultMappingContext, 0);
+            UE_LOG(LogTemp, Warning, TEXT("PlayerController: MappingContext added successfully"));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("PlayerController: DefaultMappingContext is NULL! Check Blueprint settings!"));
         }
     }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("PlayerController: Failed to get EnhancedInputLocalPlayerSubsystem"));
+    }
+    
+    UE_LOG(LogTemp, Warning, TEXT("=== CYPlayerController::BeginPlay END ==="));
 }
 
 void ACYPlayerController::SetupInputComponent()
 {
+    UE_LOG(LogTemp, Warning, TEXT("=== CYPlayerController::SetupInputComponent START ==="));
+    
     Super::SetupInputComponent();
 
-    UE_LOG(LogTemp, Warning, TEXT("=== PlayerController::SetupInputComponent called ==="));
+    UE_LOG(LogTemp, Warning, TEXT("PlayerController: InputComponent exists: %s"), InputComponent ? TEXT("YES") : TEXT("NO"));
 
     if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent))
     {
         UE_LOG(LogTemp, Warning, TEXT("PlayerController: Enhanced Input Component found"));
         
-        // Movement
-        EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACYPlayerController::Move);
-        EnhancedInput->BindAction(LookAction, ETriggerEvent::Triggered, this, &ACYPlayerController::Look);
+        // ✅ Enhanced Input 바인딩 시도
+        UE_LOG(LogTemp, Warning, TEXT("AttackAction: %s"), AttackAction ? TEXT("VALID") : TEXT("NULL"));
         
-        // Actions
-        EnhancedInput->BindAction(JumpAction, ETriggerEvent::Started, this, &ACYPlayerController::JumpPressed);
-        EnhancedInput->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACYPlayerController::JumpReleased);
-        EnhancedInput->BindAction(InteractAction, ETriggerEvent::Started, this, &ACYPlayerController::InteractPressed);
-        
-        // ✅ Attack 바인딩 확인
         if (AttackAction)
         {
             EnhancedInput->BindAction(AttackAction, ETriggerEvent::Started, this, &ACYPlayerController::AttackPressed);
             UE_LOG(LogTemp, Warning, TEXT("PlayerController: AttackAction bound successfully"));
         }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("PlayerController: AttackAction is NULL! Check Blueprint settings"));
-        }
-
-        // 인벤토리 슬롯들 (개별 바인딩)
-        if (UseItem1Action)
-            EnhancedInput->BindAction(UseItem1Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot1);
-        if (UseItem2Action)
-            EnhancedInput->BindAction(UseItem2Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot2);
-        if (UseItem3Action)
-            EnhancedInput->BindAction(UseItem3Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot3);
-        if (UseItem4Action)
-            EnhancedInput->BindAction(UseItem4Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot4);
-        if (UseItem5Action)
-            EnhancedInput->BindAction(UseItem5Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot5);
-        if (UseItem6Action)
-            EnhancedInput->BindAction(UseItem6Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot6);
-        if (UseItem7Action)
-            EnhancedInput->BindAction(UseItem7Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot7);
-        if (UseItem8Action)
-            EnhancedInput->BindAction(UseItem8Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot8);
-        if (UseItem9Action)
-            EnhancedInput->BindAction(UseItem9Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot9);
         
-        UE_LOG(LogTemp, Warning, TEXT("PlayerController: Input binding completed"));
+        // Movement
+        if (MoveAction)
+            EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACYPlayerController::Move);
+        if (LookAction)
+            EnhancedInput->BindAction(LookAction, ETriggerEvent::Triggered, this, &ACYPlayerController::Look);
+        if (JumpAction)
+        {
+            EnhancedInput->BindAction(JumpAction, ETriggerEvent::Started, this, &ACYPlayerController::JumpPressed);
+            EnhancedInput->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACYPlayerController::JumpReleased);
+        }
+        if (InteractAction)
+            EnhancedInput->BindAction(InteractAction, ETriggerEvent::Started, this, &ACYPlayerController::InteractPressed);
+        
+        // 인벤토리 키들
+        if (UseItem1Action) EnhancedInput->BindAction(UseItem1Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot1);
+        if (UseItem2Action) EnhancedInput->BindAction(UseItem2Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot2);
+        if (UseItem3Action) EnhancedInput->BindAction(UseItem3Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot3);
+        if (UseItem4Action) EnhancedInput->BindAction(UseItem4Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot4);
+        if (UseItem5Action) EnhancedInput->BindAction(UseItem5Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot5);
+        if (UseItem6Action) EnhancedInput->BindAction(UseItem6Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot6);
+        if (UseItem7Action) EnhancedInput->BindAction(UseItem7Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot7);
+        if (UseItem8Action) EnhancedInput->BindAction(UseItem8Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot8);
+        if (UseItem9Action) EnhancedInput->BindAction(UseItem9Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot9);
+        
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("PlayerController: Failed to cast to EnhancedInputComponent"));
+        UE_LOG(LogTemp, Error, TEXT("PlayerController: Failed to cast to EnhancedInputComponent!"));
+        
+        // ✅ 레거시 Input 직접 바인딩
+        if (InputComponent)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("PlayerController: Using legacy input bindings"));
+            
+            InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ACYPlayerController::AttackPressed);
+            InputComponent->BindKey(EKeys::One, IE_Pressed, this, &ACYPlayerController::UseInventorySlot1);
+            InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ACYPlayerController::UseInventorySlot2);
+            InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ACYPlayerController::UseInventorySlot3);
+            InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &ACYPlayerController::UseInventorySlot4);
+            InputComponent->BindKey(EKeys::Five, IE_Pressed, this, &ACYPlayerController::UseInventorySlot5);
+            InputComponent->BindKey(EKeys::Six, IE_Pressed, this, &ACYPlayerController::UseInventorySlot6);
+            InputComponent->BindKey(EKeys::Seven, IE_Pressed, this, &ACYPlayerController::UseInventorySlot7);
+            InputComponent->BindKey(EKeys::Eight, IE_Pressed, this, &ACYPlayerController::UseInventorySlot8);
+            InputComponent->BindKey(EKeys::Nine, IE_Pressed, this, &ACYPlayerController::UseInventorySlot9);
+            InputComponent->BindKey(EKeys::E, IE_Pressed, this, &ACYPlayerController::InteractPressed);
+            
+            UE_LOG(LogTemp, Warning, TEXT("PlayerController: Legacy input bindings completed"));
+        }
     }
+    
+    UE_LOG(LogTemp, Warning, TEXT("=== CYPlayerController::SetupInputComponent END ==="));
 }
 
 void ACYPlayerController::Move(const FInputActionValue& Value)
 {
+    // 로그 제거
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
         PlayerCharacter->Move(Value.Get<FVector2D>());
@@ -98,6 +131,7 @@ void ACYPlayerController::Look(const FInputActionValue& Value)
 
 void ACYPlayerController::JumpPressed()
 {
+    // 로그 제거
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
         PlayerCharacter->Jump();
@@ -114,6 +148,7 @@ void ACYPlayerController::JumpReleased()
 
 void ACYPlayerController::InteractPressed()
 {
+    // 로그 제거
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
         PlayerCharacter->InteractPressed();
