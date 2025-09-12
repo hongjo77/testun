@@ -42,12 +42,6 @@ void UCYAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 {
     Super::PostGameplayEffectExecute(Data);
 
-    FGameplayEffectContextHandle Context = Data.EffectSpec.GetContext();
-    UAbilitySystemComponent* Source = Context.GetOriginalInstigatorAbilitySystemComponent();
-    const FGameplayTagContainer& SourceTags = *Data.EffectSpec.CapturedSourceTags.GetAggregatedTags();
-    FGameplayTagContainer SpecAssetTags;
-    Data.EffectSpec.GetAllAssetTags(SpecAssetTags);
-
     // 체력 변화 처리
     if (Data.EvaluatedData.Attribute == GetHealthAttribute())
     {
@@ -56,11 +50,9 @@ void UCYAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 
         if (GetHealth() <= 0.0f)
         {
-            // 사망 처리
             if (AActor* Owner = GetOwningActor())
             {
                 UE_LOG(LogTemp, Warning, TEXT("%s has died"), *Owner->GetName());
-                // TODO: 사망 이벤트 발생
             }
         }
     }
@@ -69,8 +61,6 @@ void UCYAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
     if (Data.EvaluatedData.Attribute == GetMoveSpeedAttribute())
     {
         float NewMoveSpeed = GetMoveSpeed();
-        UE_LOG(LogTemp, Warning, TEXT("MoveSpeed changed to: %f for %s"), 
-               NewMoveSpeed, GetOwningActor() ? *GetOwningActor()->GetName() : TEXT("NULL"));
         
         if (ACharacter* Character = Cast<ACharacter>(GetOwningActor()))
         {
@@ -85,21 +75,17 @@ void UCYAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
                     MovementComp->MaxAcceleration = 0.0f;
                     MovementComp->BrakingDecelerationWalking = 10000.0f;
                     MovementComp->GroundFriction = 100.0f;
-                    
-                    // ✅ 점프 완전 차단
                     MovementComp->JumpZVelocity = 0.0f;
                     
-                    UE_LOG(LogTemp, Warning, TEXT("IMMOBILIZED: %s (Jump blocked)"), *Character->GetName());
+                    UE_LOG(LogTemp, Warning, TEXT("IMMOBILIZED: %s"), *Character->GetName());
                 }
                 else if (NewMoveSpeed < 200.0f)
                 {
                     MovementComp->MaxAcceleration = 500.0f;
                     MovementComp->BrakingDecelerationWalking = 1000.0f;
-                    
-                    // 느릴 때도 점프 막기
                     MovementComp->JumpZVelocity = 0.0f;
                     
-                    UE_LOG(LogTemp, Warning, TEXT("SLOWED: %s to %f (Jump blocked)"), *Character->GetName(), NewMoveSpeed);
+                    UE_LOG(LogTemp, Warning, TEXT("SLOWED: %s to %f"), *Character->GetName(), NewMoveSpeed);
                 }
                 else
                 {
@@ -107,11 +93,15 @@ void UCYAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
                     MovementComp->MaxAcceleration = 2048.0f;
                     MovementComp->BrakingDecelerationWalking = 2000.0f;
                     MovementComp->GroundFriction = 8.0f;
+                    MovementComp->JumpZVelocity = 600.0f;
                     
-                    // ✅ 점프 복구
-                    MovementComp->JumpZVelocity = 600.0f;  // 원래 점프력
-                    
-                    UE_LOG(LogTemp, Warning, TEXT("MOVEMENT RESTORED: %s (Jump enabled)"), *Character->GetName());
+                    UE_LOG(LogTemp, Warning, TEXT("MOVEMENT RESTORED: %s"), *Character->GetName());
+                }
+                
+                // 네트워크 동기화
+                if (Character->HasAuthority())
+                {
+                    Character->ForceNetUpdate();
                 }
             }
         }

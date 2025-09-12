@@ -32,16 +32,23 @@ ACYTrapBase::ACYTrapBase()
         ItemMesh->SetVisibility(true);
     }
 
-    // 🔥 확실하게 기본 효과 추가
-    ItemEffects.Empty();
-    ItemEffects.Add(UGE_ImmobilizeTrap::StaticClass());
-    
-    UE_LOG(LogTemp, Warning, TEXT("🏗️ TrapBase created with %d effects"), ItemEffects.Num());
+    // ✅ 생성자에서는 기본값 설정 안함 (GA_PlaceTrap에서 설정하도록)
 }
 
 void ACYTrapBase::BeginPlay()
 {
     Super::BeginPlay();
+
+    // ✅ BeginPlay에서만 ItemEffects가 비어있으면 기본값 설정
+    if (ItemEffects.Num() == 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No custom effects, using default ImmobilizeTrap"));
+        ItemEffects.Add(UGE_ImmobilizeTrap::StaticClass());
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Trap using %d custom effects"), ItemEffects.Num());
+    }
 
     if (HasAuthority())
     {
@@ -57,119 +64,54 @@ void ACYTrapBase::ArmTrap()
 {
     bIsArmed = true;
 
-    // 기존 InteractionSphere를 트리거로 재사용하거나 새로 생성
     if (!InteractionSphere)
     {
         InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("TriggerSphere"));
         InteractionSphere->SetupAttachment(RootComponent);
     }
     
-    // 트리거 설정
     InteractionSphere->SetSphereRadius(TriggerRadius);
     InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
     
-    // 기존 델리게이트 제거 후 트랩 트리거 바인딩
     InteractionSphere->OnComponentBeginOverlap.Clear();
     InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnTrapTriggered);
 
-    UE_LOG(LogTemp, Warning, TEXT("Trap armed at location: %s"), *GetActorLocation().ToString());
+    UE_LOG(LogTemp, Warning, TEXT("Trap armed"));
 }
 
 void ACYTrapBase::OnTrapTriggered(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
         bool bFromSweep, const FHitResult& SweepResult)
 {
-    UE_LOG(LogTemp, Warning, TEXT("🚨 TRAP TRIGGERED by: %s"), OtherActor ? *OtherActor->GetName() : TEXT("NULL"));
-    
-    if (!bIsArmed || !HasAuthority()) 
-    {
-        UE_LOG(LogTemp, Warning, TEXT("❌ Trap not armed or no authority"));
-        return;
-    }
-    
-    if (OtherActor == GetOwner()) 
-    {
-        UE_LOG(LogTemp, Warning, TEXT("❌ Owner triggered own trap, ignoring"));
-        return;
-    }
+    if (!bIsArmed || !HasAuthority() || OtherActor == GetOwner()) return;
 
     ACYPlayerCharacter* Target = Cast<ACYPlayerCharacter>(OtherActor);
-    if (!Target) 
-    {
-        UE_LOG(LogTemp, Warning, TEXT("❌ Not a player character"));
-        return;
-    }
+    if (!Target) return;
 
     UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
-    if (!TargetASC) 
-    {
-        UE_LOG(LogTemp, Warning, TEXT("❌ No ASC found on target"));
-        return;
-    }
+    if (!TargetASC) return;
 
-    UE_LOG(LogTemp, Warning, TEXT("✅ Target found: %s"), *Target->GetName());
-    UE_LOG(LogTemp, Warning, TEXT("📊 ItemEffects count: %d"), ItemEffects.Num());
+    UE_LOG(LogTemp, Warning, TEXT("Trap triggered on %s with %d effects"), 
+           *Target->GetName(), ItemEffects.Num());
 
-    // 🔥 ItemEffects가 비어있으면 기본 효과 사용
-    if (ItemEffects.Num() == 0)
+    // 효과들 적용
+    for (TSubclassOf<UGameplayEffect> EffectClass : ItemEffects)
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ No ItemEffects! Using default ImmobilizeTrap effect"));
-        
-        // 기본 효과 직접 적용
-        FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
-        EffectContext.AddSourceObject(this);
-        
-        FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(UGE_ImmobilizeTrap::StaticClass(), 1, EffectContext);
-        if (EffectSpec.IsValid())
+        if (EffectClass)
         {
-            TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
-            UE_LOG(LogTemp, Warning, TEXT("✅ Default ImmobilizeTrap effect applied"));
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("❌ Failed to create default effect spec"));
-        }
-    }
-    else
-    {
-        // 설정된 효과들 적용
-        for (TSubclassOf<UGameplayEffect> EffectClass : ItemEffects)
-        {
-            if (EffectClass)
+            FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
+            EffectContext.AddSourceObject(this);
+            
+            FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(EffectClass, 1, EffectContext);
+            if (EffectSpec.IsValid())
             {
-                UE_LOG(LogTemp, Warning, TEXT("🎯 Applying effect: %s"), *EffectClass->GetName());
-                
-                FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
-                EffectContext.AddSourceObject(this);
-                
-                FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(EffectClass, 1, EffectContext);
-                if (EffectSpec.IsValid())
-                {
-                    FActiveGameplayEffectHandle ActiveHandle = TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
-                    if (ActiveHandle.IsValid())
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("✅ Effect applied successfully!"));
-                    }
-                    else
-                    {
-                        UE_LOG(LogTemp, Error, TEXT("❌ Failed to apply effect"));
-                    }
-                }
-                else
-                {
-                    UE_LOG(LogTemp, Error, TEXT("❌ Invalid effect spec"));
-                }
-            }
-            else
-            {
-                UE_LOG(LogTemp, Error, TEXT("❌ NULL effect class"));
+                TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
+                UE_LOG(LogTemp, Warning, TEXT("Applied effect: %s"), *EffectClass->GetName());
             }
         }
     }
 
-    // 트랩 제거
-    UE_LOG(LogTemp, Warning, TEXT("🗑️ Destroying trap"));
     Destroy();
 }

@@ -233,47 +233,17 @@ ACYItemBase* UCYInventoryComponent::GetItem(int32 SlotIndex) const
     return nullptr;
 }
 
-// CYInventoryComponent.cpp - UseItem 함수 전체 (기존 파일에서 이 함수만 교체)
 bool UCYInventoryComponent::UseItem(int32 SlotIndex)
 {
-    UE_LOG(LogTemp, Warning, TEXT("🎯 === USE ITEM DEBUGGING ==="));
-    UE_LOG(LogTemp, Warning, TEXT("UCYInventoryComponent::UseItem called with SlotIndex: %d"), SlotIndex);
-    
     if (!GetOwner()->HasAuthority()) 
     {
-        UE_LOG(LogTemp, Warning, TEXT("UseItem: No authority"));
         return false;
     }
 
     ACYItemBase* Item = GetItem(SlotIndex);
     if (!Item) 
     {
-        UE_LOG(LogTemp, Warning, TEXT("UseItem: No item in slot %d"), SlotIndex);
         return false;
-    }
-
-    UE_LOG(LogTemp, Warning, TEXT("UseItem: Found item %s in slot %d"), *Item->ItemName.ToString(), SlotIndex);
-    UE_LOG(LogTemp, Warning, TEXT("Item class: %s"), *Item->GetClass()->GetName());
-
-    // 🔍 트랩 아이템인 경우 DesiredTrapEffects 확인
-    FGameplayTag TrapTag = FGameplayTag::RequestGameplayTag("Item.Trap");
-    if (Item->ItemTag.MatchesTag(TrapTag))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("🎯 This is a TRAP item!"));
-        UE_LOG(LogTemp, Warning, TEXT("DesiredTrapEffects.Num(): %d"), Item->DesiredTrapEffects.Num());
-        
-        for (int32 i = 0; i < Item->DesiredTrapEffects.Num(); i++)
-        {
-            if (Item->DesiredTrapEffects[i])
-            {
-                UE_LOG(LogTemp, Warning, TEXT("  DesiredEffect[%d]: %s"), 
-                       i, *Item->DesiredTrapEffects[i]->GetName());
-            }
-            else
-            {
-                UE_LOG(LogTemp, Error, TEXT("  DesiredEffect[%d]: NULL"), i);
-            }
-        }
     }
 
     // 무기 슬롯(1000번대)인 경우 WeaponComponent에 장착
@@ -281,7 +251,6 @@ bool UCYInventoryComponent::UseItem(int32 SlotIndex)
     {
         if (ACYWeaponBase* Weapon = Cast<ACYWeaponBase>(Item))
         {
-            UE_LOG(LogTemp, Warning, TEXT("UseItem: Weapon slot clicked, equipping weapon"));
             UCYWeaponComponent* WeaponComp = GetOwner()->FindComponentByClass<UCYWeaponComponent>();
             if (WeaponComp)
             {
@@ -293,60 +262,30 @@ bool UCYInventoryComponent::UseItem(int32 SlotIndex)
 
     // 일반 아이템 처리
     UAbilitySystemComponent* ASC = GetOwnerASC();
-    if (!ASC) 
+    if (!ASC || !Item->ItemAbility) 
     {
-        UE_LOG(LogTemp, Warning, TEXT("UseItem: No ASC found"));
         return false;
     }
-
-    if (!Item->ItemAbility) 
-    {
-        UE_LOG(LogTemp, Warning, TEXT("UseItem: Item %s has no ability"), *Item->ItemName.ToString());
-        return false;
-    }
-
-    UE_LOG(LogTemp, Warning, TEXT("UseItem: Item %s has ability %s"), 
-           *Item->ItemName.ToString(), *Item->ItemAbility->GetName());
 
     FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Item->ItemAbility);
     if (Spec)
     {
-        UE_LOG(LogTemp, Warning, TEXT("✅ Found ability spec for %s"), *Item->ItemAbility->GetName());
-        
-        // 🔍 SourceObject 설정 디버깅
-        UE_LOG(LogTemp, Warning, TEXT("🎯 SETTING SourceObject to: %s"), *Item->GetName());
-        UE_LOG(LogTemp, Warning, TEXT("Item address: %p"), Item);
-        
+        // ✅ SourceObject 설정 (트랩 효과 전달용)
         Spec->SourceObject = Item;
         
-        // 설정 확인
-        if (Spec->SourceObject.IsValid())
-        {
-            UE_LOG(LogTemp, Warning, TEXT("✅ SourceObject set successfully: %s"), 
-                   *Spec->SourceObject->GetName());
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("❌ SourceObject setting FAILED!"));
-        }
-        
-        UE_LOG(LogTemp, Warning, TEXT("🚀 Trying to activate ability..."));
         bool bSuccess = ASC->TryActivateAbility(Spec->Handle);
-        UE_LOG(LogTemp, Warning, TEXT("Ability activation result: %s"), 
-               bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
         
         if (bSuccess)
         {
             // 아이템 사용 후 처리
+            FGameplayTag TrapTag = FGameplayTag::RequestGameplayTag("Item.Trap");
             FGameplayTag ConsumableTag = FGameplayTag::RequestGameplayTag("Item.Consumable");
             
             if (Item->ItemTag.MatchesTag(ConsumableTag) || Item->ItemTag.MatchesTag(TrapTag))
             {
-                UE_LOG(LogTemp, Warning, TEXT("UseItem: Item is consumable/trap, reducing count"));
                 Item->ItemCount--;
                 if (Item->ItemCount <= 0)
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("UseItem: Item count reached 0, removing from slot"));
                     ItemSlots[SlotIndex] = nullptr;
                     OnInventoryChanged.Broadcast(SlotIndex, nullptr);
                     Item->Destroy();
@@ -358,12 +297,7 @@ bool UCYInventoryComponent::UseItem(int32 SlotIndex)
             }
         }
         
-        UE_LOG(LogTemp, Warning, TEXT("🎯 === END USE ITEM DEBUGGING ==="));
         return bSuccess;
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("UseItem: Could not find ability spec for item %s"), *Item->ItemName.ToString());
     }
     
     return false;
