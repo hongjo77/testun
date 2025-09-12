@@ -14,7 +14,6 @@ ACYTrapBase::ACYTrapBase()
     ItemDescription = FText::FromString("A placeable trap");
     ItemTag = FGameplayTag::RequestGameplayTag("Item.Trap");
 
-    // ✅ 트랩은 최대 5개까지 스택 가능
     MaxStackCount = 5;
     ItemCount = 1;
 
@@ -33,7 +32,11 @@ ACYTrapBase::ACYTrapBase()
         ItemMesh->SetVisibility(true);
     }
 
+    // 🔥 확실하게 기본 효과 추가
+    ItemEffects.Empty();
     ItemEffects.Add(UGE_ImmobilizeTrap::StaticClass());
+    
+    UE_LOG(LogTemp, Warning, TEXT("🏗️ TrapBase created with %d effects"), ItemEffects.Num());
 }
 
 void ACYTrapBase::BeginPlay()
@@ -78,42 +81,95 @@ void ACYTrapBase::OnTrapTriggered(UPrimitiveComponent* OverlappedComponent, AAct
         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
         bool bFromSweep, const FHitResult& SweepResult)
 {
-    UE_LOG(LogTemp, Warning, TEXT("Trap triggered by: %s"), OtherActor ? *OtherActor->GetName() : TEXT("NULL"));
+    UE_LOG(LogTemp, Warning, TEXT("🚨 TRAP TRIGGERED by: %s"), OtherActor ? *OtherActor->GetName() : TEXT("NULL"));
     
-    if (!bIsArmed || !HasAuthority()) return;
-    if (OtherActor == GetOwner()) return;
+    if (!bIsArmed || !HasAuthority()) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("❌ Trap not armed or no authority"));
+        return;
+    }
+    
+    if (OtherActor == GetOwner()) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("❌ Owner triggered own trap, ignoring"));
+        return;
+    }
 
     ACYPlayerCharacter* Target = Cast<ACYPlayerCharacter>(OtherActor);
-    if (!Target) return;
+    if (!Target) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("❌ Not a player character"));
+        return;
+    }
 
     UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
-    if (!TargetASC) return;
-
-    // ItemEffects 적용
-    UE_LOG(LogTemp, Warning, TEXT("ItemEffects count: %d"), ItemEffects.Num());
-    
-    for (TSubclassOf<UGameplayEffect> EffectClass : ItemEffects)
+    if (!TargetASC) 
     {
-        if (EffectClass)
+        UE_LOG(LogTemp, Warning, TEXT("❌ No ASC found on target"));
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("✅ Target found: %s"), *Target->GetName());
+    UE_LOG(LogTemp, Warning, TEXT("📊 ItemEffects count: %d"), ItemEffects.Num());
+
+    // 🔥 ItemEffects가 비어있으면 기본 효과 사용
+    if (ItemEffects.Num() == 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ No ItemEffects! Using default ImmobilizeTrap effect"));
+        
+        // 기본 효과 직접 적용
+        FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
+        EffectContext.AddSourceObject(this);
+        
+        FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(UGE_ImmobilizeTrap::StaticClass(), 1, EffectContext);
+        if (EffectSpec.IsValid())
         {
-            UE_LOG(LogTemp, Warning, TEXT("Applying effect: %s"), *EffectClass->GetName());
-            
-            FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
-            EffectContext.AddSourceObject(this);
-            
-            FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(EffectClass, 1, EffectContext);
-            if (EffectSpec.IsValid())
+            TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
+            UE_LOG(LogTemp, Warning, TEXT("✅ Default ImmobilizeTrap effect applied"));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("❌ Failed to create default effect spec"));
+        }
+    }
+    else
+    {
+        // 설정된 효과들 적용
+        for (TSubclassOf<UGameplayEffect> EffectClass : ItemEffects)
+        {
+            if (EffectClass)
             {
-                TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
-                UE_LOG(LogTemp, Warning, TEXT("Effect applied successfully"));
+                UE_LOG(LogTemp, Warning, TEXT("🎯 Applying effect: %s"), *EffectClass->GetName());
+                
+                FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
+                EffectContext.AddSourceObject(this);
+                
+                FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(EffectClass, 1, EffectContext);
+                if (EffectSpec.IsValid())
+                {
+                    FActiveGameplayEffectHandle ActiveHandle = TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
+                    if (ActiveHandle.IsValid())
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("✅ Effect applied successfully!"));
+                    }
+                    else
+                    {
+                        UE_LOG(LogTemp, Error, TEXT("❌ Failed to apply effect"));
+                    }
+                }
+                else
+                {
+                    UE_LOG(LogTemp, Error, TEXT("❌ Invalid effect spec"));
+                }
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("❌ NULL effect class"));
             }
         }
     }
 
-    if (ItemEffects.Num() == 0)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("No ItemEffects configured"));
-    }
-
+    // 트랩 제거
+    UE_LOG(LogTemp, Warning, TEXT("🗑️ Destroying trap"));
     Destroy();
 }

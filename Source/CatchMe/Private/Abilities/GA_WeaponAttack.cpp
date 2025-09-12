@@ -13,10 +13,21 @@ UGA_WeaponAttack::UGA_WeaponAttack()
 
     const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
 
-    AbilityTags.AddTag(GameplayTags.Ability_Weapon_Attack);
-    ActivationOwnedTags.AddTag(GameplayTags.State_Attacking);
-    ActivationBlockedTags.AddTag(GameplayTags.State_Stunned);
-    ActivationBlockedTags.AddTag(GameplayTags.State_Dead);
+    // 🔥 AbilityTags deprecated 경고 해결 - SetAssetTags 사용
+    FGameplayTagContainer AssetTags;
+    AssetTags.AddTag(GameplayTags.Ability_Weapon_Attack);
+    SetAssetTags(AssetTags);
+    
+    // Activation Owned Tags
+    FGameplayTagContainer OwnedTags;
+    OwnedTags.AddTag(GameplayTags.State_Attacking);
+    ActivationOwnedTags = OwnedTags;
+    
+    // Activation Blocked Tags
+    FGameplayTagContainer BlockedTags;
+    BlockedTags.AddTag(GameplayTags.State_Stunned);
+    BlockedTags.AddTag(GameplayTags.State_Dead);
+    ActivationBlockedTags = BlockedTags;
 }
 
 void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,

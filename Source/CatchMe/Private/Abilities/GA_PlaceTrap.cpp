@@ -14,12 +14,18 @@ UGA_PlaceTrap::UGA_PlaceTrap()
 
     TrapClass = ACYTrapBase::StaticClass();
     
-    // ✅ 중앙집중식 태그 사용
+    // 🔥 AbilityTags deprecated 경고 해결 - SetAssetTags 사용
     const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
     
-    AbilityTags.AddTag(GameplayTags.Ability_Trap_Place);
-    ActivationBlockedTags.AddTag(GameplayTags.State_Stunned);
-    ActivationBlockedTags.AddTag(GameplayTags.State_Dead);
+    FGameplayTagContainer AssetTags;
+    AssetTags.AddTag(GameplayTags.Ability_Trap_Place);
+    SetAssetTags(AssetTags);
+    
+    // Activation Blocked Tags
+    FGameplayTagContainer BlockedTags;
+    BlockedTags.AddTag(GameplayTags.State_Stunned);
+    BlockedTags.AddTag(GameplayTags.State_Dead);
+    ActivationBlockedTags = BlockedTags;
 }
 
 void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
@@ -38,7 +44,6 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
     UE_LOG(LogTemp, Warning, TEXT("PlaceTrap: Authority check passed"));
 
-    // ✅ PlayerCharacter 대신 일반 Actor 사용
     AActor* OwnerActor = GetAvatarActorFromActorInfo();
     
     UE_LOG(LogTemp, Warning, TEXT("OwnerActor: %s"), OwnerActor ? TEXT("Valid") : TEXT("NULL"));
@@ -67,11 +72,10 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
         return;
     }
 
-    // ✅ 트랩 설치 위치 계산 - WeaponComponent 사용 또는 직접 라인트레이스
+    // 트랩 설치 위치 계산
     FHitResult HitResult;
     FVector SpawnLocation;
     
-    // WeaponComponent를 찾아서 라인트레이스 시도
     UCYWeaponComponent* WeaponComp = OwnerActor->FindComponentByClass<UCYWeaponComponent>();
     if (WeaponComp && WeaponComp->PerformLineTrace(HitResult, 300.0f))
     {
@@ -80,7 +84,6 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     }
     else
     {
-        // 라인트레이스 실패시 앞쪽에 배치
         SpawnLocation = OwnerActor->GetActorLocation() + 
                     OwnerActor->GetActorForwardVector() * 200.0f;
         SpawnLocation.Z = OwnerActor->GetActorLocation().Z;
@@ -99,24 +102,78 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     
     if (ACYTrapBase* Trap = GetWorld()->SpawnActor<ACYTrapBase>(TrapClass, SpawnLocation, SpawnRotation, SpawnParams))
     {
-        // 소스 오브젝트에서 원하는 효과 가져오기
-        if (const FGameplayAbilitySpec* CurrentSpec = GetCurrentAbilitySpec())
+        UE_LOG(LogTemp, Warning, TEXT("✅ SUCCESS: Trap spawned at %s by %s"), 
+               *SpawnLocation.ToString(), *OwnerActor->GetName());
+
+        // 🔍 소스 오브젝트 디버깅 - 더 자세히
+        UE_LOG(LogTemp, Warning, TEXT("🔍 === SOURCE OBJECT DEBUGGING ==="));
+        
+        const FGameplayAbilitySpec* CurrentSpec = GetCurrentAbilitySpec();
+        UE_LOG(LogTemp, Warning, TEXT("CurrentSpec: %s"), CurrentSpec ? TEXT("EXISTS") : TEXT("NULL"));
+        
+        if (CurrentSpec)
         {
+            UE_LOG(LogTemp, Warning, TEXT("SourceObject.IsValid(): %s"), 
+                   CurrentSpec->SourceObject.IsValid() ? TEXT("YES") : TEXT("NO"));
+            
             if (CurrentSpec->SourceObject.IsValid())
             {
-                if (ACYItemBase* UsedItem = Cast<ACYItemBase>(CurrentSpec->SourceObject.Get()))
+                UObject* SourceObj = CurrentSpec->SourceObject.Get();
+                UE_LOG(LogTemp, Warning, TEXT("SourceObject: %s (Class: %s)"), 
+                       *SourceObj->GetName(), *SourceObj->GetClass()->GetName());
+                
+                if (ACYItemBase* UsedItem = Cast<ACYItemBase>(SourceObj))
                 {
+                    UE_LOG(LogTemp, Warning, TEXT("✅ Cast to CYItemBase SUCCESS"));
+                    UE_LOG(LogTemp, Warning, TEXT("ItemName: %s"), *UsedItem->ItemName.ToString());
+                    UE_LOG(LogTemp, Warning, TEXT("DesiredTrapEffects.Num(): %d"), UsedItem->DesiredTrapEffects.Num());
+                    
+                    // 각 DesiredTrapEffect 로그
+                    for (int32 i = 0; i < UsedItem->DesiredTrapEffects.Num(); i++)
+                    {
+                        if (UsedItem->DesiredTrapEffects[i])
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("  DesiredEffect[%d]: %s"), 
+                                   i, *UsedItem->DesiredTrapEffects[i]->GetName());
+                        }
+                        else
+                        {
+                            UE_LOG(LogTemp, Error, TEXT("  DesiredEffect[%d]: NULL"), i);
+                        }
+                    }
+                    
                     if (UsedItem->DesiredTrapEffects.Num() > 0)
                     {
+                        UE_LOG(LogTemp, Warning, TEXT("🎯 COPYING DesiredTrapEffects to Trap"));
                         Trap->ItemEffects = UsedItem->DesiredTrapEffects;
-                        UE_LOG(LogTemp, Warning, TEXT("Applied %d custom effects to trap"), UsedItem->DesiredTrapEffects.Num());
+                        UE_LOG(LogTemp, Warning, TEXT("✅ Applied %d custom effects to trap"), UsedItem->DesiredTrapEffects.Num());
+                    }
+                    else
+                    {
+                        UE_LOG(LogTemp, Error, TEXT("❌ DesiredTrapEffects is EMPTY!"));
+                        UE_LOG(LogTemp, Error, TEXT("❌ Check BP_TestTrap DesiredTrapEffects array!"));
                     }
                 }
+                else
+                {
+                    UE_LOG(LogTemp, Error, TEXT("❌ Cast to CYItemBase FAILED"));
+                    UE_LOG(LogTemp, Error, TEXT("❌ SourceObject class: %s"), *SourceObj->GetClass()->GetName());
+                }
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("❌ SourceObject is INVALID"));
             }
         }
-    
-        UE_LOG(LogTemp, Warning, TEXT("SUCCESS: Trap placed at %s by %s"), 
-               *SpawnLocation.ToString(), *OwnerActor->GetName());
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("❌ GetCurrentAbilitySpec() returned NULL"));
+            UE_LOG(LogTemp, Error, TEXT("❌ This means ability wasn't triggered by UseItem"));
+        }
+        
+        // 🔍 최종 결과 확인
+        UE_LOG(LogTemp, Warning, TEXT("🎯 FINAL: Trap->ItemEffects.Num() = %d"), Trap->ItemEffects.Num());
+        UE_LOG(LogTemp, Warning, TEXT("🔍 === END SOURCE OBJECT DEBUGGING ==="));
     }
     else
     {

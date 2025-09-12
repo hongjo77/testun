@@ -12,27 +12,41 @@ ACYPlayerController::ACYPlayerController()
 void ACYPlayerController::BeginPlay()
 {
     UE_LOG(LogTemp, Warning, TEXT("=== CYPlayerController::BeginPlay START ==="));
+    UE_LOG(LogTemp, Warning, TEXT("IsLocalController: %s"), IsLocalController() ? TEXT("YES") : TEXT("NO"));
+    UE_LOG(LogTemp, Warning, TEXT("HasAuthority: %s"), HasAuthority() ? TEXT("YES") : TEXT("NO"));
+    UE_LOG(LogTemp, Warning, TEXT("GetNetMode: %d"), (int32)GetNetMode());
     
     Super::BeginPlay();
 
-    if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+    // 🔍 Enhanced Input 실패 원인 진단
+    ULocalPlayer* LocalPlayer = GetLocalPlayer();
+    UE_LOG(LogTemp, Warning, TEXT("LocalPlayer: %s"), LocalPlayer ? TEXT("EXISTS") : TEXT("NULL"));
+    
+    if (!LocalPlayer)
     {
-        UE_LOG(LogTemp, Warning, TEXT("PlayerController: Found EnhancedInputLocalPlayerSubsystem"));
+        UE_LOG(LogTemp, Error, TEXT("🚨 NO LocalPlayer - This is why Enhanced Input fails!"));
+        UE_LOG(LogTemp, Error, TEXT("🚨 Dedicated Server has no LocalPlayer"));
+        UE_LOG(LogTemp, Warning, TEXT("✅ Using Legacy Input instead"));
+        return;
+    }
+
+    if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("✅ Found EnhancedInputLocalPlayerSubsystem"));
         
         if (DefaultMappingContext)
         {
-            UE_LOG(LogTemp, Warning, TEXT("PlayerController: DefaultMappingContext is valid, adding..."));
+            UE_LOG(LogTemp, Warning, TEXT("✅ Adding DefaultMappingContext"));
             Subsystem->AddMappingContext(DefaultMappingContext, 0);
-            UE_LOG(LogTemp, Warning, TEXT("PlayerController: MappingContext added successfully"));
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("PlayerController: DefaultMappingContext is NULL! Check Blueprint settings!"));
+            UE_LOG(LogTemp, Error, TEXT("❌ DefaultMappingContext is NULL!"));
         }
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("PlayerController: Failed to get EnhancedInputLocalPlayerSubsystem"));
+        UE_LOG(LogTemp, Error, TEXT("❌ Failed to get EnhancedInputLocalPlayerSubsystem"));
     }
     
     UE_LOG(LogTemp, Warning, TEXT("=== CYPlayerController::BeginPlay END ==="));
@@ -40,23 +54,20 @@ void ACYPlayerController::BeginPlay()
 
 void ACYPlayerController::SetupInputComponent()
 {
-    UE_LOG(LogTemp, Warning, TEXT("=== CYPlayerController::SetupInputComponent START ==="));
+    UE_LOG(LogTemp, Error, TEXT("🔥🔥🔥 SETUP INPUT COMPONENT CALLED 🔥🔥🔥"));
     
     Super::SetupInputComponent();
 
-    UE_LOG(LogTemp, Warning, TEXT("PlayerController: InputComponent exists: %s"), InputComponent ? TEXT("YES") : TEXT("NO"));
-
     if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent))
     {
-        UE_LOG(LogTemp, Warning, TEXT("PlayerController: Enhanced Input Component found"));
+        UE_LOG(LogTemp, Warning, TEXT("Enhanced Input Component found"));
         
-        // ✅ Enhanced Input 바인딩 시도
-        UE_LOG(LogTemp, Warning, TEXT("AttackAction: %s"), AttackAction ? TEXT("VALID") : TEXT("NULL"));
+        UE_LOG(LogTemp, Warning, TEXT("PrimaryAttackAction: %s"), PrimaryAttackAction ? TEXT("VALID") : TEXT("NULL"));
         
-        if (AttackAction)
+        if (PrimaryAttackAction)
         {
-            EnhancedInput->BindAction(AttackAction, ETriggerEvent::Started, this, &ACYPlayerController::AttackPressed);
-            UE_LOG(LogTemp, Warning, TEXT("PlayerController: AttackAction bound successfully"));
+            EnhancedInput->BindAction(PrimaryAttackAction, ETriggerEvent::Started, this, &ACYPlayerController::PrimaryAttackPressed);
+            UE_LOG(LogTemp, Warning, TEXT("PrimaryAttackAction bound successfully"));
         }
         
         // Movement
@@ -82,39 +93,47 @@ void ACYPlayerController::SetupInputComponent()
         if (UseItem7Action) EnhancedInput->BindAction(UseItem7Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot7);
         if (UseItem8Action) EnhancedInput->BindAction(UseItem8Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot8);
         if (UseItem9Action) EnhancedInput->BindAction(UseItem9Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot9);
+    }
+
+    // 🔥 레거시 Input 바인딩 (Enhanced Input 실패 시 대안)
+    if (InputComponent)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Adding legacy input bindings"));
         
+        // 🔥 Attack 바인딩 - 여러 키로 테스트
+        InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ACYPlayerController::PrimaryAttackPressed);
+        InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACYPlayerController::PrimaryAttackPressed);
+        InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ACYPlayerController::PrimaryAttackPressed);
+        
+        // 기존 바인딩들
+        InputComponent->BindKey(EKeys::E, IE_Pressed, this, &ACYPlayerController::InteractPressed);
+        InputComponent->BindKey(EKeys::One, IE_Pressed, this, &ACYPlayerController::UseInventorySlot1);
+        InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ACYPlayerController::UseInventorySlot2);
+        InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ACYPlayerController::UseInventorySlot3);
+        InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &ACYPlayerController::UseInventorySlot4);
+        InputComponent->BindKey(EKeys::Five, IE_Pressed, this, &ACYPlayerController::UseInventorySlot5);
+        InputComponent->BindKey(EKeys::Six, IE_Pressed, this, &ACYPlayerController::UseInventorySlot6);
+        InputComponent->BindKey(EKeys::Seven, IE_Pressed, this, &ACYPlayerController::UseInventorySlot7);
+        InputComponent->BindKey(EKeys::Eight, IE_Pressed, this, &ACYPlayerController::UseInventorySlot8);
+        InputComponent->BindKey(EKeys::Nine, IE_Pressed, this, &ACYPlayerController::UseInventorySlot9);
+        
+        UE_LOG(LogTemp, Warning, TEXT("✅ LEGACY BINDINGS COMPLETE: F, SpaceBar, LeftMouse → Attack"));
+        
+        // 🔥 화면 메시지로 확인
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow,
+                TEXT("Input Setup Complete - F/Space/Mouse = Attack!"));
+        }
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("PlayerController: Failed to cast to EnhancedInputComponent!"));
-        
-        // ✅ 레거시 Input 직접 바인딩
-        if (InputComponent)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("PlayerController: Using legacy input bindings"));
-            
-            InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ACYPlayerController::AttackPressed);
-            InputComponent->BindKey(EKeys::One, IE_Pressed, this, &ACYPlayerController::UseInventorySlot1);
-            InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ACYPlayerController::UseInventorySlot2);
-            InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ACYPlayerController::UseInventorySlot3);
-            InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &ACYPlayerController::UseInventorySlot4);
-            InputComponent->BindKey(EKeys::Five, IE_Pressed, this, &ACYPlayerController::UseInventorySlot5);
-            InputComponent->BindKey(EKeys::Six, IE_Pressed, this, &ACYPlayerController::UseInventorySlot6);
-            InputComponent->BindKey(EKeys::Seven, IE_Pressed, this, &ACYPlayerController::UseInventorySlot7);
-            InputComponent->BindKey(EKeys::Eight, IE_Pressed, this, &ACYPlayerController::UseInventorySlot8);
-            InputComponent->BindKey(EKeys::Nine, IE_Pressed, this, &ACYPlayerController::UseInventorySlot9);
-            InputComponent->BindKey(EKeys::E, IE_Pressed, this, &ACYPlayerController::InteractPressed);
-            
-            UE_LOG(LogTemp, Warning, TEXT("PlayerController: Legacy input bindings completed"));
-        }
+        UE_LOG(LogTemp, Error, TEXT("❌ NO InputComponent!"));
     }
-    
-    UE_LOG(LogTemp, Warning, TEXT("=== CYPlayerController::SetupInputComponent END ==="));
 }
 
 void ACYPlayerController::Move(const FInputActionValue& Value)
 {
-    // 로그 제거
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
         PlayerCharacter->Move(Value.Get<FVector2D>());
@@ -131,7 +150,6 @@ void ACYPlayerController::Look(const FInputActionValue& Value)
 
 void ACYPlayerController::JumpPressed()
 {
-    // 로그 제거
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
         PlayerCharacter->Jump();
@@ -148,29 +166,53 @@ void ACYPlayerController::JumpReleased()
 
 void ACYPlayerController::InteractPressed()
 {
-    // 로그 제거
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
         PlayerCharacter->InteractPressed();
     }
 }
 
-void ACYPlayerController::AttackPressed()
+// 🔥 클라이언트에서 호출되는 함수
+void ACYPlayerController::PrimaryAttackPressed()
 {
-    UE_LOG(LogTemp, Warning, TEXT("=== PlayerController::AttackPressed called ==="));
+    // 🔥 클라이언트 로그 (클라이언트 콘솔에만 표시)
+    UE_LOG(LogTemp, Error, TEXT("🚀 CLIENT: PRIMARY ATTACK PRESSED!!!"));
+    
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Red, 
+            TEXT("CLIENT: ATTACK KEY PRESSED!"));
+    }
+    
+    // 🔥 서버로 RPC 전송
+    ServerAttackPressed();
+}
+
+// 🔥 서버에서 실행되는 RPC 함수
+void ACYPlayerController::ServerAttackPressed_Implementation()
+{
+    // 🔥 서버 로그 (데디케이티드 서버 콘솔에 표시)
+    UE_LOG(LogTemp, Error, TEXT("🔥 SERVER: Attack RPC received from %s"), 
+           GetPawn() ? *GetPawn()->GetName() : TEXT("NULL"));
+    
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Green, 
+            TEXT("SERVER: Attack RPC Received!"));
+    }
     
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
-        UE_LOG(LogTemp, Warning, TEXT("PlayerController: Found PlayerCharacter, calling AttackPressed"));
+        UE_LOG(LogTemp, Warning, TEXT("SERVER: Calling PlayerCharacter->AttackPressed"));
         PlayerCharacter->AttackPressed();
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("PlayerController: GetPawn() failed or not CYPlayerCharacter"));
+        UE_LOG(LogTemp, Error, TEXT("SERVER: GetPawn() is not CYPlayerCharacter"));
     }
 }
 
-// ✅ 키 매핑 변경: 1~3번은 무기, 4~9번은 아이템
+// 키 매핑: 1~3번은 무기, 4~9번은 아이템
 void ACYPlayerController::UseInventorySlot1() { UseInventorySlot(1000); } // 무기 슬롯 0
 void ACYPlayerController::UseInventorySlot2() { UseInventorySlot(1001); } // 무기 슬롯 1
 void ACYPlayerController::UseInventorySlot3() { UseInventorySlot(1002); } // 무기 슬롯 2
