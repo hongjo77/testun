@@ -6,6 +6,8 @@
 #include "Components/CYWeaponComponent.h"
 #include "Items/CYWeaponBase.h"
 #include "Net/UnrealNetwork.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
 
 UCYInventoryComponent::UCYInventoryComponent()
 {
@@ -17,7 +19,6 @@ void UCYInventoryComponent::BeginPlay()
 {
     Super::BeginPlay();
     
-    // ✅ 분리된 슬롯 크기 설정
     WeaponSlots.SetNum(WeaponSlotCount);
     ItemSlots.SetNum(ItemSlotCount);
 }
@@ -29,20 +30,114 @@ void UCYInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
     DOREPLIFETIME(UCYInventoryComponent, ItemSlots);
 }
 
-int32 UCYInventoryComponent::FindEmptySlot() const
+bool UCYInventoryComponent::AddItem(ACYItemBase* Item, int32 SlotIndex)
 {
-    // 아이템 슬롯에서 빈 공간 찾기
-    return FindEmptyItemSlot();
+    if (!Item) return false;
+
+    FGameplayTag WeaponTag = FGameplayTag::RequestGameplayTag("Item.Weapon");
+    
+    if (Item->ItemTag.MatchesTag(WeaponTag))
+    {
+        return AddWeapon(Item);
+    }
+    else
+    {
+        return AddItemWithStacking(Item);
+    }
 }
+
+bool UCYInventoryComponent::AddWeapon(ACYItemBase* Weapon)
+{
+    if (!Weapon) return false;
+
+    int32 EmptySlot = FindEmptyWeaponSlot();
+    if (EmptySlot == -1) return false;
+
+    WeaponSlots[EmptySlot] = Weapon;
+    OnInventoryChanged.Broadcast(EmptySlot + 1000, Weapon);
+    
+    // 첫 번째 무기 자동 장착
+    AutoEquipFirstWeapon(Cast<ACYWeaponBase>(Weapon));
+    
+    UE_LOG(LogTemp, Log, TEXT("Weapon added to slot %d"), EmptySlot);
+    return true;
+}
+
+bool UCYInventoryComponent::AddItemWithStacking(ACYItemBase* Item)
+{
+    if (!Item) return false;
+
+    // 1. 기존 스택에 추가 시도
+    if (TryStackWithExistingItem(Item))
+    {
+        return true;
+    }
+
+    // 2. 새 슬롯에 추가
+    int32 EmptySlot = FindEmptyItemSlot();
+    if (EmptySlot == -1) return false;
+
+    ItemSlots[EmptySlot] = Item;
+    OnInventoryChanged.Broadcast(EmptySlot, Item);
+    
+    UE_LOG(LogTemp, Log, TEXT("Item added to slot %d"), EmptySlot);
+    return true;
+}
+
+bool UCYInventoryComponent::UseItem(int32 SlotIndex)
+{
+    if (!GetOwner()->HasAuthority()) return false;
+
+    ACYItemBase* Item = GetItem(SlotIndex);
+    if (!Item) return false;
+
+    // 무기 장착
+    if (SlotIndex >= 1000)
+    {
+        return EquipWeaponFromSlot(Item);
+    }
+
+    // 일반 아이템 사용
+    return ActivateItemAbility(Item, SlotIndex);
+}
+
+bool UCYInventoryComponent::RemoveItem(int32 SlotIndex)
+{
+    if (SlotIndex >= 1000) // 무기 슬롯
+    {
+        return RemoveWeaponFromSlot(SlotIndex - 1000);
+    }
+    else // 아이템 슬롯
+    {
+        return RemoveItemFromSlot(SlotIndex);
+    }
+}
+
+ACYItemBase* UCYInventoryComponent::GetItem(int32 SlotIndex) const
+{
+    if (SlotIndex >= 1000) // 무기 슬롯
+    {
+        int32 WeaponIndex = SlotIndex - 1000;
+        return (WeaponIndex >= 0 && WeaponIndex < WeaponSlots.Num()) ? WeaponSlots[WeaponIndex] : nullptr;
+    }
+    else // 아이템 슬롯
+    {
+        return (SlotIndex >= 0 && SlotIndex < ItemSlots.Num()) ? ItemSlots[SlotIndex] : nullptr;
+    }
+}
+
+void UCYInventoryComponent::ServerUseItem_Implementation(int32 SlotIndex)
+{
+    UseItem(SlotIndex);
+}
+
+// === 헬퍼 함수들 ===
 
 int32 UCYInventoryComponent::FindEmptyWeaponSlot() const
 {
     for (int32 i = 0; i < WeaponSlots.Num(); ++i)
     {
-        if (!WeaponSlots[i])
-        {
-            return i;
-        }
+        if (!WeaponSlots[i]) return i;
     }
     return -1;
 }
@@ -51,261 +146,139 @@ int32 UCYInventoryComponent::FindEmptyItemSlot() const
 {
     for (int32 i = 0; i < ItemSlots.Num(); ++i)
     {
-        if (!ItemSlots[i])
-        {
-            return i;
-        }
+        if (!ItemSlots[i]) return i;
     }
     return -1;
 }
 
 int32 UCYInventoryComponent::FindStackableItemSlot(ACYItemBase* Item) const
 {
-    if (!Item) 
-    {
-        UE_LOG(LogTemp, Warning, TEXT("FindStackableItemSlot: Item is null"));
-        return -1;
-    }
+    if (!Item) return -1;
     
     for (int32 i = 0; i < ItemSlots.Num(); ++i)
     {
         if (ItemSlots[i] && ItemSlots[i]->CanStackWith(Item))
         {
-            UE_LOG(LogTemp, Warning, TEXT("FindStackableItemSlot: Found stackable slot %d"), i);
             return i;
         }
     }
-    
-    UE_LOG(LogTemp, Warning, TEXT("FindStackableItemSlot: No stackable slot found"));
     return -1;
 }
 
-bool UCYInventoryComponent::AddItemWithStacking(ACYItemBase* Item)
+bool UCYInventoryComponent::TryStackWithExistingItem(ACYItemBase* Item)
 {
-    if (!Item) return false;
-
-    UE_LOG(LogTemp, Warning, TEXT("AddItemWithStacking: Adding %s (count: %d)"), 
-           *Item->ItemName.ToString(), Item->ItemCount);
-
-    // 1. 스택 가능한 슬롯 찾기
     int32 StackableSlot = FindStackableItemSlot(Item);
-    if (StackableSlot != -1)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("AddItemWithStacking: Found stackable slot %d"), StackableSlot);
-        
-        // 스택에 추가
-        ACYItemBase* ExistingItem = ItemSlots[StackableSlot];
-        int32 AddableCount = FMath::Min(Item->ItemCount, 
-                                      ExistingItem->MaxStackCount - ExistingItem->ItemCount);
-        
-        UE_LOG(LogTemp, Warning, TEXT("AddItemWithStacking: Adding %d to existing stack of %d"), 
-               AddableCount, ExistingItem->ItemCount);
-        
-        ExistingItem->ItemCount += AddableCount;
-        Item->ItemCount -= AddableCount;
-        
-        OnInventoryChanged.Broadcast(StackableSlot, ExistingItem);
-        
-        // 아이템이 모두 스택되었으면 원본 아이템 제거
-        if (Item->ItemCount <= 0)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("AddItemWithStacking: All items stacked, destroying original"));
-            Item->Destroy();
-            return true;
-        }
-    }
+    if (StackableSlot == -1) return false;
 
-    // 2. 새 슬롯에 추가 (남은 수량이 있다면)
-    int32 EmptySlot = FindEmptyItemSlot();
-    if (EmptySlot != -1)
+    ACYItemBase* ExistingItem = ItemSlots[StackableSlot];
+    int32 AddableCount = FMath::Min(Item->ItemCount, 
+                                    ExistingItem->MaxStackCount - ExistingItem->ItemCount);
+    
+    ExistingItem->ItemCount += AddableCount;
+    Item->ItemCount -= AddableCount;
+    
+    OnInventoryChanged.Broadcast(StackableSlot, ExistingItem);
+    
+    // 아이템이 모두 스택되면 원본 제거
+    if (Item->ItemCount <= 0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("AddItemWithStacking: Adding to empty slot %d (key %d)"), 
-               EmptySlot, EmptySlot + 4);
-        
-        ItemSlots[EmptySlot] = Item;
-        OnInventoryChanged.Broadcast(EmptySlot, Item);
+        Item->Destroy();
         return true;
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("AddItemWithStacking: No empty item slots"));
-    return false; // 인벤토리 가득참
+    
+    return false; // 일부만 스택됨 - 새 슬롯 필요
 }
 
-bool UCYInventoryComponent::AddWeapon(ACYItemBase* Weapon)
+void UCYInventoryComponent::AutoEquipFirstWeapon(ACYWeaponBase* Weapon)
 {
-    if (!Weapon) return false;
+    if (!Weapon) return;
 
-    UE_LOG(LogTemp, Warning, TEXT("AddWeapon: Adding %s"), *Weapon->ItemName.ToString());
-
-    int32 EmptySlot = FindEmptyWeaponSlot();
-    if (EmptySlot != -1)
+    UCYWeaponComponent* WeaponComp = GetOwner()->FindComponentByClass<UCYWeaponComponent>();
+    if (WeaponComp && !WeaponComp->CurrentWeapon)
     {
-        WeaponSlots[EmptySlot] = Weapon;
-        OnInventoryChanged.Broadcast(EmptySlot + 1000, Weapon); // 무기는 1000번대로 구분
-        
-        UE_LOG(LogTemp, Warning, TEXT("AddWeapon: Added to weapon slot %d (key %d)"), EmptySlot, EmptySlot + 1);
-        
-        // ✅ 첫 번째 무기 자동 장착
+        WeaponComp->EquipWeapon(Weapon);
+    }
+}
+
+bool UCYInventoryComponent::EquipWeaponFromSlot(ACYItemBase* Item)
+{
+    if (ACYWeaponBase* Weapon = Cast<ACYWeaponBase>(Item))
+    {
         UCYWeaponComponent* WeaponComp = GetOwner()->FindComponentByClass<UCYWeaponComponent>();
-        if (WeaponComp && !WeaponComp->CurrentWeapon)
-        {
-            if (ACYWeaponBase* WeaponBase = Cast<ACYWeaponBase>(Weapon))
-            {
-                bool bEquipped = WeaponComp->EquipWeapon(WeaponBase);
-                UE_LOG(LogTemp, Warning, TEXT("AddWeapon: Auto-equipped result: %s"), 
-                       bEquipped ? TEXT("SUCCESS") : TEXT("FAILED"));
-            }
-        }
-        
-        return true;
+        return WeaponComp ? WeaponComp->EquipWeapon(Weapon) : false;
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("AddWeapon: No empty weapon slots"));
-    return false; // 무기 슬롯 가득참
+    return false;
 }
 
-bool UCYInventoryComponent::AddItem(ACYItemBase* Item, int32 SlotIndex)
+bool UCYInventoryComponent::ActivateItemAbility(ACYItemBase* Item, int32 SlotIndex)
 {
-    if (!Item) return false;
+    UAbilitySystemComponent* ASC = GetOwnerASC();
+    if (!ASC || !Item->ItemAbility) return false;
 
-    UE_LOG(LogTemp, Warning, TEXT("UCYInventoryComponent::AddItem: %s with tag %s"), 
-           *Item->ItemName.ToString(), *Item->ItemTag.ToString());
+    FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Item->ItemAbility);
+    if (!Spec) return false;
 
-    // ✅ 하드코딩 태그로 확인
-    FGameplayTag WeaponTag = FGameplayTag::RequestGameplayTag("Item.Weapon");
+    // ✅ SourceObject 설정 로그 추가
+    Spec->SourceObject = Item;
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Setting SourceObject for ability: Item=%s, DesiredTrapEffects=%d"), 
+           *Item->ItemName.ToString(), Item->DesiredTrapEffects.Num());
     
-    UE_LOG(LogTemp, Warning, TEXT("Checking weapon tag: Item=%s vs Weapon=%s"), 
-           *Item->ItemTag.ToString(), *WeaponTag.ToString());
+    bool bSuccess = ASC->TryActivateAbility(Spec->Handle);
     
-    if (Item->ItemTag.MatchesTag(WeaponTag))
+    if (bSuccess)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Item is weapon, adding to weapon slots"));
-        return AddWeapon(Item);
+        UE_LOG(LogTemp, Log, TEXT("✅ Item ability activated: %s"), *Item->ItemName.ToString());
+        ProcessItemConsumption(Item, SlotIndex);
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("Item is not weapon, adding to item slots"));
-        return AddItemWithStacking(Item);
+        UE_LOG(LogTemp, Warning, TEXT("❌ Failed to activate item ability: %s"), *Item->ItemName.ToString());
     }
+    
+    return bSuccess;
 }
 
-bool UCYInventoryComponent::RemoveItem(int32 SlotIndex)
+void UCYInventoryComponent::ProcessItemConsumption(ACYItemBase* Item, int32 SlotIndex)
 {
-    if (SlotIndex >= 1000) // 무기 슬롯
+    FGameplayTag ConsumableTag = FGameplayTag::RequestGameplayTag("Item.Consumable");
+    FGameplayTag TrapTag = FGameplayTag::RequestGameplayTag("Item.Trap");
+    
+    if (Item->ItemTag.MatchesTag(ConsumableTag) || Item->ItemTag.MatchesTag(TrapTag))
     {
-        int32 WeaponIndex = SlotIndex - 1000;
-        if (WeaponIndex >= 0 && WeaponIndex < WeaponSlots.Num() && WeaponSlots[WeaponIndex])
-        {
-            WeaponSlots[WeaponIndex] = nullptr;
-            OnInventoryChanged.Broadcast(SlotIndex, nullptr);
-            return true;
-        }
-    }
-    else // 아이템 슬롯
-    {
-        if (SlotIndex >= 0 && SlotIndex < ItemSlots.Num() && ItemSlots[SlotIndex])
+        Item->ItemCount--;
+        if (Item->ItemCount <= 0)
         {
             ItemSlots[SlotIndex] = nullptr;
             OnInventoryChanged.Broadcast(SlotIndex, nullptr);
-            return true;
+            Item->Destroy();
         }
+        else
+        {
+            OnInventoryChanged.Broadcast(SlotIndex, Item);
+        }
+    }
+}
+
+bool UCYInventoryComponent::RemoveWeaponFromSlot(int32 WeaponIndex)
+{
+    if (WeaponIndex >= 0 && WeaponIndex < WeaponSlots.Num() && WeaponSlots[WeaponIndex])
+    {
+        WeaponSlots[WeaponIndex] = nullptr;
+        OnInventoryChanged.Broadcast(WeaponIndex + 1000, nullptr);
+        return true;
     }
     return false;
 }
 
-ACYItemBase* UCYInventoryComponent::GetItem(int32 SlotIndex) const
+bool UCYInventoryComponent::RemoveItemFromSlot(int32 ItemIndex)
 {
-    if (SlotIndex >= 1000) // 무기 슬롯
+    if (ItemIndex >= 0 && ItemIndex < ItemSlots.Num() && ItemSlots[ItemIndex])
     {
-        int32 WeaponIndex = SlotIndex - 1000;
-        if (WeaponIndex >= 0 && WeaponIndex < WeaponSlots.Num())
-        {
-            return WeaponSlots[WeaponIndex];
-        }
+        ItemSlots[ItemIndex] = nullptr;
+        OnInventoryChanged.Broadcast(ItemIndex, nullptr);
+        return true;
     }
-    else // 아이템 슬롯
-    {
-        if (SlotIndex >= 0 && SlotIndex < ItemSlots.Num())
-        {
-            return ItemSlots[SlotIndex];
-        }
-    }
-    return nullptr;
-}
-
-bool UCYInventoryComponent::UseItem(int32 SlotIndex)
-{
-    if (!GetOwner()->HasAuthority()) 
-    {
-        return false;
-    }
-
-    ACYItemBase* Item = GetItem(SlotIndex);
-    if (!Item) 
-    {
-        return false;
-    }
-
-    // 무기 슬롯(1000번대)인 경우 WeaponComponent에 장착
-    if (SlotIndex >= 1000)
-    {
-        if (ACYWeaponBase* Weapon = Cast<ACYWeaponBase>(Item))
-        {
-            UCYWeaponComponent* WeaponComp = GetOwner()->FindComponentByClass<UCYWeaponComponent>();
-            if (WeaponComp)
-            {
-                return WeaponComp->EquipWeapon(Weapon);
-            }
-        }
-        return false;
-    }
-
-    // 일반 아이템 처리
-    UAbilitySystemComponent* ASC = GetOwnerASC();
-    if (!ASC || !Item->ItemAbility) 
-    {
-        return false;
-    }
-
-    FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Item->ItemAbility);
-    if (Spec)
-    {
-        // ✅ SourceObject 설정 (트랩 효과 전달용)
-        Spec->SourceObject = Item;
-        
-        bool bSuccess = ASC->TryActivateAbility(Spec->Handle);
-        
-        if (bSuccess)
-        {
-            // 아이템 사용 후 처리
-            FGameplayTag TrapTag = FGameplayTag::RequestGameplayTag("Item.Trap");
-            FGameplayTag ConsumableTag = FGameplayTag::RequestGameplayTag("Item.Consumable");
-            
-            if (Item->ItemTag.MatchesTag(ConsumableTag) || Item->ItemTag.MatchesTag(TrapTag))
-            {
-                Item->ItemCount--;
-                if (Item->ItemCount <= 0)
-                {
-                    ItemSlots[SlotIndex] = nullptr;
-                    OnInventoryChanged.Broadcast(SlotIndex, nullptr);
-                    Item->Destroy();
-                }
-                else
-                {
-                    OnInventoryChanged.Broadcast(SlotIndex, Item);
-                }
-            }
-        }
-        
-        return bSuccess;
-    }
-    
     return false;
-}
-
-void UCYInventoryComponent::ServerUseItem_Implementation(int32 SlotIndex)
-{
-    UseItem(SlotIndex);
 }
 
 void UCYInventoryComponent::OnRep_WeaponSlots()
@@ -322,43 +295,6 @@ void UCYInventoryComponent::OnRep_ItemSlots()
     {
         OnInventoryChanged.Broadcast(i, ItemSlots[i]);
     }
-}
-
-void UCYInventoryComponent::PrintInventoryStatus() const
-{
-    UE_LOG(LogTemp, Warning, TEXT("=== 인벤토리 상태 ==="));
-    
-    // 무기 슬롯 (1~3번 키)
-    UE_LOG(LogTemp, Warning, TEXT("🗡️ 무기 슬롯 (1~3번 키):"));
-    for (int32 i = 0; i < WeaponSlots.Num(); ++i)
-    {
-        if (WeaponSlots[i])
-        {
-            UE_LOG(LogTemp, Warning, TEXT("  [%d번 키] %s x%d"), 
-                   i + 1, *WeaponSlots[i]->ItemName.ToString(), WeaponSlots[i]->ItemCount);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("  [%d번 키] 비어있음"), i + 1);
-        }
-    }
-    
-    // 아이템 슬롯 (4~9번 키)
-    UE_LOG(LogTemp, Warning, TEXT("🎒 아이템 슬롯 (4~9번 키):"));
-    for (int32 i = 0; i < ItemSlots.Num() && i < 6; ++i) // 6개만 표시 (4~9번 키)
-    {
-        if (ItemSlots[i])
-        {
-            UE_LOG(LogTemp, Warning, TEXT("  [%d번 키] %s x%d"), 
-                   i + 4, *ItemSlots[i]->ItemName.ToString(), ItemSlots[i]->ItemCount);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("  [%d번 키] 비어있음"), i + 4);
-        }
-    }
-    
-    UE_LOG(LogTemp, Warning, TEXT("=================="));
 }
 
 UAbilitySystemComponent* UCYInventoryComponent::GetOwnerASC() const

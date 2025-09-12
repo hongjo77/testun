@@ -2,10 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "GameplayTagContainer.h"
 #include "CYInventoryComponent.generated.h"
 
 class ACYItemBase;
+class ACYWeaponBase;
 class UAbilitySystemComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInventoryChanged, int32, SlotIndex, ACYItemBase*, Item);
@@ -18,18 +18,17 @@ class CATCHME_API UCYInventoryComponent : public UActorComponent
 public:
 	UCYInventoryComponent();
 
-	// ✅ 무기와 아이템 슬롯 분리
+	// 슬롯 설정
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
-	int32 WeaponSlotCount = 3;  // 무기 슬롯 개수
+	int32 WeaponSlotCount = 3;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
-	int32 ItemSlotCount = 10;   // 아이템 슬롯 개수
+	int32 ItemSlotCount = 10;
 
-	// 무기 슬롯들 (1~3번 키)
+	// 슬롯 배열
 	UPROPERTY(ReplicatedUsing = OnRep_WeaponSlots, BlueprintReadOnly, Category = "Inventory")
 	TArray<ACYItemBase*> WeaponSlots;
 
-	// 아이템 슬롯들 (4~9번 키)
 	UPROPERTY(ReplicatedUsing = OnRep_ItemSlots, BlueprintReadOnly, Category = "Inventory")
 	TArray<ACYItemBase*> ItemSlots;
 
@@ -37,10 +36,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Events")
 	FOnInventoryChanged OnInventoryChanged;
 
-	// 인벤토리 관리
-	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	int32 FindEmptySlot() const;
-
+	// 공개 인터페이스
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool AddItem(ACYItemBase* Item, int32 SlotIndex = -1);
 
@@ -56,31 +52,37 @@ public:
 	UFUNCTION(Server, Reliable, Category = "Inventory")
 	void ServerUseItem(int32 SlotIndex);
 
-	// ✅ 새로운 함수들
-	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	bool AddItemWithStacking(ACYItemBase* Item);
-
-	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	bool AddWeapon(ACYItemBase* Weapon);
-
-	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	void PrintInventoryStatus() const;
-
 protected:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	// 리플리케이션 응답
 	UFUNCTION()
 	void OnRep_WeaponSlots();
 
 	UFUNCTION()
 	void OnRep_ItemSlots();
 
-	// 소유자의 ASC 가져오기
-	UAbilitySystemComponent* GetOwnerASC() const;
+	// 핵심 로직
+	bool AddWeapon(ACYItemBase* Weapon);
+	bool AddItemWithStacking(ACYItemBase* Item);
 
-	// ✅ 헬퍼 함수들
+	// 유틸리티 함수
 	int32 FindEmptyWeaponSlot() const;
 	int32 FindEmptyItemSlot() const;
 	int32 FindStackableItemSlot(ACYItemBase* Item) const;
+	bool TryStackWithExistingItem(ACYItemBase* Item);
+	void AutoEquipFirstWeapon(ACYWeaponBase* Weapon);
+
+	// 아이템 사용 관련
+	bool EquipWeaponFromSlot(ACYItemBase* Item);
+	bool ActivateItemAbility(ACYItemBase* Item, int32 SlotIndex);
+	void ProcessItemConsumption(ACYItemBase* Item, int32 SlotIndex);
+
+	// 제거 관련
+	bool RemoveWeaponFromSlot(int32 WeaponIndex);
+	bool RemoveItemFromSlot(int32 ItemIndex);
+
+	// ASC 접근
+	UAbilitySystemComponent* GetOwnerASC() const;
 };

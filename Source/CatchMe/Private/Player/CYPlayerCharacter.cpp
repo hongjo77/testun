@@ -24,13 +24,12 @@ ACYPlayerCharacter::ACYPlayerCharacter()
     bUseControllerRotationPitch = false;
     bUseControllerRotationRoll = false;
 
-    // Spring Arm
+    // Camera Components
     SpringArmComponent = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
     SpringArmComponent->SetupAttachment(RootComponent);
     SpringArmComponent->TargetArmLength = 400.0f;
     SpringArmComponent->bUsePawnControlRotation = true;
 
-    // Camera
     CameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
     CameraComponent->SetupAttachment(SpringArmComponent);
 
@@ -41,7 +40,7 @@ ACYPlayerCharacter::ACYPlayerCharacter()
 
     AttributeSet = CreateDefaultSubobject<UCYAttributeSet>(TEXT("AttributeSet"));
 
-    // ✅ 새로운 컴포넌트들 생성
+    // Gameplay Components
     InventoryComponent = CreateDefaultSubobject<UCYInventoryComponent>(TEXT("InventoryComponent"));
     ItemInteractionComponent = CreateDefaultSubobject<UCYItemInteractionComponent>(TEXT("ItemInteractionComponent"));
     WeaponComponent = CreateDefaultSubobject<UCYWeaponComponent>(TEXT("WeaponComponent"));
@@ -54,17 +53,12 @@ void ACYPlayerCharacter::BeginPlay()
 
 void ACYPlayerCharacter::PossessedBy(AController* NewController)
 {
-    UE_LOG(LogTemp, Warning, TEXT("=== CYPlayerCharacter::PossessedBy called ==="));
-    UE_LOG(LogTemp, Warning, TEXT("NewController: %s"), NewController ? *NewController->GetClass()->GetName() : TEXT("NULL"));
-    
     Super::PossessedBy(NewController);
 
     if (AbilitySystemComponent)
     {
         InitializeAbilitySystem();
     }
-    
-    UE_LOG(LogTemp, Warning, TEXT("=== CYPlayerCharacter::PossessedBy completed ==="));
 }
 
 void ACYPlayerCharacter::OnRep_PlayerState()
@@ -85,28 +79,8 @@ void ACYPlayerCharacter::InitializeAbilitySystem()
 
     if (HasAuthority())
     {
-        for (TSubclassOf<UGameplayAbility> AbilityClass : DefaultAbilities)
-        {
-            if (AbilityClass)
-            {
-                AbilitySystemComponent->GiveAbility(
-                    FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this)
-                );
-            }
-        }
-
-        FGameplayEffectContextHandle ContextHandle = AbilitySystemComponent->MakeEffectContext();
-        ContextHandle.AddSourceObject(this);
-        
-        FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(
-            UGE_InitialStats::StaticClass(), 1, ContextHandle
-        );
-        
-        if (SpecHandle.IsValid())
-        {
-            AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-            UE_LOG(LogTemp, Warning, TEXT("Initial stats applied to %s"), *GetName());
-        }
+        GrantDefaultAbilities();
+        ApplyInitialStats();
     }
 }
 
@@ -118,7 +92,6 @@ UAbilitySystemComponent* ACYPlayerCharacter::GetAbilitySystemComponent() const
 void ACYPlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    // 컴포넌트들이 자체적으로 리플리케이션 처리
 }
 
 void ACYPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -126,7 +99,8 @@ void ACYPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
     Super::SetupPlayerInputComponent(PlayerInputComponent);
 }
 
-// ✅ 입력 함수들 - 컴포넌트에 위임
+// === 입력 처리 함수들 ===
+
 void ACYPlayerCharacter::Move(const FVector2D& Value)
 {
     if (Controller && (Value.X != 0.0f || Value.Y != 0.0f))
@@ -158,27 +132,10 @@ void ACYPlayerCharacter::InteractPressed()
 
 void ACYPlayerCharacter::AttackPressed()
 {
-    UE_LOG(LogTemp, Warning, TEXT("=== ACYPlayerCharacter::AttackPressed called ==="));
-    
+    // ✅ 핵심 로직만 유지 - 과도한 로그 제거
     if (WeaponComponent)
     {
-        UE_LOG(LogTemp, Warning, TEXT("PlayerCharacter: WeaponComponent found, calling PerformAttack"));
         WeaponComponent->PerformAttack();
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("PlayerCharacter: WeaponComponent is NULL!"));
-        
-        // ✅ 컴포넌트 존재 여부 확인
-        if (InventoryComponent)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("PlayerCharacter: InventoryComponent exists"));
-            InventoryComponent->PrintInventoryStatus();
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("PlayerCharacter: InventoryComponent is also NULL!"));
-        }
     }
 }
 
@@ -187,5 +144,36 @@ void ACYPlayerCharacter::UseInventorySlot(int32 SlotIndex)
     if (InventoryComponent)
     {
         InventoryComponent->ServerUseItem(SlotIndex);
+    }
+}
+
+// === 초기화 헬퍼 함수들 ===
+
+void ACYPlayerCharacter::GrantDefaultAbilities()
+{
+    for (TSubclassOf<UGameplayAbility> AbilityClass : DefaultAbilities)
+    {
+        if (AbilityClass)
+        {
+            AbilitySystemComponent->GiveAbility(
+                FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this)
+            );
+        }
+    }
+}
+
+void ACYPlayerCharacter::ApplyInitialStats()
+{
+    FGameplayEffectContextHandle ContextHandle = AbilitySystemComponent->MakeEffectContext();
+    ContextHandle.AddSourceObject(this);
+    
+    FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(
+        UGE_InitialStats::StaticClass(), 1, ContextHandle
+    );
+    
+    if (SpecHandle.IsValid())
+    {
+        AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+        UE_LOG(LogTemp, Log, TEXT("Initial stats applied to %s"), *GetName());
     }
 }

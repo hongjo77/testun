@@ -4,6 +4,7 @@
 #include "AbilitySystemInterface.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "Engine/Engine.h"
 #include "GameFramework/Character.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SphereComponent.h"
@@ -28,36 +29,17 @@ bool UCYWeaponComponent::EquipWeapon(ACYWeaponBase* Weapon)
 {
     if (!Weapon || !GetOwner()->HasAuthority()) return false;
 
-    UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Equipping weapon %s"), *Weapon->ItemName.ToString());
-
     if (CurrentWeapon)
     {
         UnequipWeapon();
     }
 
     CurrentWeapon = Weapon;
+    AttachWeaponToOwner(Weapon);
+    DisableWeaponInteraction(Weapon);
     
-    USkeletalMeshComponent* OwnerMesh = GetOwnerMesh();
-    if (OwnerMesh)
-    {
-        Weapon->AttachToComponent(
-            OwnerMesh,
-            FAttachmentTransformRules::SnapToTargetIncludingScale,
-            WeaponSocketName
-        );
-    }
-
-    if (Weapon->ItemMesh)
-    {
-        Weapon->ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    }
-    if (Weapon->InteractionSphere)
-    {
-        Weapon->InteractionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    }
-
     OnWeaponChanged.Broadcast(nullptr, CurrentWeapon);
-    UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Weapon equipped successfully"));
+    UE_LOG(LogTemp, Log, TEXT("Weapon equipped: %s"), *Weapon->ItemName.ToString());
     return true;
 }
 
@@ -66,7 +48,6 @@ bool UCYWeaponComponent::UnequipWeapon()
     if (!CurrentWeapon || !GetOwner()->HasAuthority()) return false;
 
     ACYWeaponBase* OldWeapon = CurrentWeapon;
-    
     CurrentWeapon->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
     CurrentWeapon = nullptr;
 
@@ -76,53 +57,33 @@ bool UCYWeaponComponent::UnequipWeapon()
 
 bool UCYWeaponComponent::PerformAttack()
 {
-    UE_LOG(LogTemp, Warning, TEXT("=== UCYWeaponComponent::PerformAttack called ==="));
-    
-    // ✅ 인벤토리 상태는 무조건 출력
-    if (UCYInventoryComponent* InventoryComp = GetOwner()->FindComponentByClass<UCYInventoryComponent>())
-    {
-        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Found InventoryComponent, printing status"));
-        InventoryComp->PrintInventoryStatus();
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: InventoryComponent not found!"));
-    }
-
+    // ✅ 핵심 로직만 유지 - 과도한 로그 제거
     if (!CurrentWeapon) 
     {
-        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: 무기가 장착되지 않음"));
+        UE_LOG(LogTemp, Warning, TEXT("No weapon equipped"));
         return false;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Current weapon: %s"), *CurrentWeapon->ItemName.ToString());
-
-    UAbilitySystemComponent* ASC = GetOwnerASC();
+    UCYAbilitySystemComponent* ASC = GetOwnerAbilitySystemComponent();
     if (!ASC) 
     {
-        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: No ASC found"));
+        UE_LOG(LogTemp, Warning, TEXT("No AbilitySystemComponent found"));
         return false;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: ASC found, trying to cast to CY ASC"));
-
-    if (UCYAbilitySystemComponent* CYasc = Cast<UCYAbilitySystemComponent>(ASC))
+    const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
+    bool bResult = ASC->TryActivateAbilityByTag(GameplayTags.Ability_Weapon_Attack);
+    
+    if (bResult)
     {
-        const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
-        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Trying to activate ability with tag: %s"), 
-               *GameplayTags.Ability_Weapon_Attack.ToString());
-        
-        bool bResult = CYasc->TryActivateAbilityByTag(GameplayTags.Ability_Weapon_Attack);
-        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Ability activation result: %s"), 
-               bResult ? TEXT("SUCCESS") : TEXT("FAILED"));
-        return bResult;
+        UE_LOG(LogTemp, Log, TEXT("Weapon attack activated"));
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("WeaponComponent: Failed to cast ASC to CYAbilitySystemComponent"));
+        UE_LOG(LogTemp, Warning, TEXT("Failed to activate weapon attack"));
     }
 
-    return false;
+    return bResult;
 }
 
 bool UCYWeaponComponent::PerformLineTrace(FHitResult& OutHit, float Range)
@@ -147,23 +108,15 @@ void UCYWeaponComponent::OnRep_CurrentWeapon()
     
     if (CurrentWeapon)
     {
-        USkeletalMeshComponent* OwnerMesh = GetOwnerMesh();
-        if (OwnerMesh)
-        {
-            CurrentWeapon->AttachToComponent(
-                OwnerMesh,
-                FAttachmentTransformRules::SnapToTargetIncludingScale,
-                WeaponSocketName
-            );
-        }
+        AttachWeaponToOwner(CurrentWeapon);
     }
 }
 
-UAbilitySystemComponent* UCYWeaponComponent::GetOwnerASC() const
+UCYAbilitySystemComponent* UCYWeaponComponent::GetOwnerAbilitySystemComponent() const
 {
     if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(GetOwner()))
     {
-        return ASI->GetAbilitySystemComponent();
+        return Cast<UCYAbilitySystemComponent>(ASI->GetAbilitySystemComponent());
     }
     return nullptr;
 }
@@ -175,4 +128,110 @@ USkeletalMeshComponent* UCYWeaponComponent::GetOwnerMesh() const
         return Character->GetMesh();
     }
     return nullptr;
+}
+
+void UCYWeaponComponent::AttachWeaponToOwner(ACYWeaponBase* Weapon)
+{
+    if (!Weapon) return;
+
+    USkeletalMeshComponent* OwnerMesh = GetOwnerMesh();
+    if (OwnerMesh)
+    {
+        Weapon->AttachToComponent(
+            OwnerMesh,
+            FAttachmentTransformRules::SnapToTargetIncludingScale,
+            WeaponSocketName
+        );
+    }
+}
+
+void UCYWeaponComponent::DisableWeaponInteraction(ACYWeaponBase* Weapon)
+{
+    if (!Weapon) return;
+
+    if (Weapon->ItemMesh)
+    {
+        Weapon->ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    }
+    if (Weapon->InteractionSphere)
+    {
+        Weapon->InteractionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    }
+}
+
+void UCYWeaponComponent::ClientDisplayInventoryStatus_Implementation()
+{
+    UE_LOG(LogTemp, Warning, TEXT("📦 ClientDisplayInventoryStatus_Implementation called"));
+    
+    if (!GEngine) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("GEngine is null"));
+        return;
+    }
+
+    UCYInventoryComponent* InventoryComp = GetOwner()->FindComponentByClass<UCYInventoryComponent>();
+    if (!InventoryComp)
+    {
+        GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Red, TEXT("❌ No InventoryComponent found"));
+        UE_LOG(LogTemp, Error, TEXT("InventoryComponent not found"));
+        return;
+    }
+
+    // 화면에 인벤토리 상태 표시
+    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow, TEXT("=== 📦 INVENTORY STATUS ==="));
+    
+    // 무기 슬롯 (1~3번 키)
+    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Cyan, TEXT("🗡️ WEAPONS (Keys 1-3):"));
+    for (int32 i = 0; i < InventoryComp->WeaponSlots.Num(); ++i)
+    {
+        FString WeaponInfo;
+        if (InventoryComp->WeaponSlots[i])
+        {
+            WeaponInfo = FString::Printf(TEXT("  [%d] %s x%d"), 
+                i + 1, 
+                *InventoryComp->WeaponSlots[i]->ItemName.ToString(), 
+                InventoryComp->WeaponSlots[i]->ItemCount
+            );
+            
+            // 현재 장착된 무기 표시
+            if (CurrentWeapon == InventoryComp->WeaponSlots[i])
+            {
+                WeaponInfo += TEXT(" ⭐ EQUIPPED");
+                GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, WeaponInfo);
+            }
+            else
+            {
+                GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::White, WeaponInfo);
+            }
+        }
+        else
+        {
+            WeaponInfo = FString::Printf(TEXT("  [%d] Empty"), i + 1);
+            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, WeaponInfo);
+        }
+    }
+    
+    // 아이템 슬롯 (4~9번 키, 처음 6개만)
+    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Cyan, TEXT("🎒 ITEMS (Keys 4-9):"));
+    int32 MaxDisplayItems = FMath::Min(6, InventoryComp->ItemSlots.Num());
+    for (int32 i = 0; i < MaxDisplayItems; ++i)
+    {
+        FString ItemInfo;
+        if (InventoryComp->ItemSlots[i])
+        {
+            ItemInfo = FString::Printf(TEXT("  [%d] %s x%d"), 
+                i + 4, 
+                *InventoryComp->ItemSlots[i]->ItemName.ToString(), 
+                InventoryComp->ItemSlots[i]->ItemCount
+            );
+            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::White, ItemInfo);
+        }
+        else
+        {
+            ItemInfo = FString::Printf(TEXT("  [%d] Empty"), i + 4);
+            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, ItemInfo);
+        }
+    }
+    
+    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow, TEXT("=================="));
 }

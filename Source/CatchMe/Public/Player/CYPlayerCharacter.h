@@ -3,15 +3,12 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
-#include "GameplayTagContainer.h"
 #include "CYPlayerCharacter.generated.h"
 
 class USpringArmComponent;
 class UCameraComponent;
-class UAbilitySystemComponent;
-class UCYAttributeSet;
 class UCYAbilitySystemComponent;
-class UGameplayEffect;
+class UCYAttributeSet;
 class UGameplayAbility;
 class UCYInventoryComponent;
 class UCYItemInteractionComponent;
@@ -25,20 +22,21 @@ class CATCHME_API ACYPlayerCharacter : public ACharacter, public IAbilitySystemI
 public:
     ACYPlayerCharacter();
 
-    // Components
+    // Camera Components
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
     USpringArmComponent* SpringArmComponent;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
     UCameraComponent* CameraComponent;
 
+    // GAS Components
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
     UCYAbilitySystemComponent* AbilitySystemComponent;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GAS")
     UCYAttributeSet* AttributeSet;
 
-    // ✅ 새로운 컴포넌트들
+    // Gameplay Components
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UCYInventoryComponent* InventoryComponent;
 
@@ -51,7 +49,7 @@ public:
     // IAbilitySystemInterface
     virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
-    // Input Functions (컴포넌트에 위임)
+    // Input Functions
     UFUNCTION(BlueprintCallable, Category = "Input")
     void Move(const FVector2D& Value);
 
@@ -72,12 +70,13 @@ protected:
     virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
     virtual void PossessedBy(AController* NewController) override;
     virtual void OnRep_PlayerState() override;
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+    // GAS 초기화
     void InitializeAbilitySystem();
+    void GrantDefaultAbilities();
+    void ApplyInitialStats();
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS")
     TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities;
-
-public:
-    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 };

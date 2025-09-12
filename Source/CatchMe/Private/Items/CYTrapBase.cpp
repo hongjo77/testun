@@ -20,6 +20,7 @@ ACYTrapBase::ACYTrapBase()
     // 트랩은 픽업 불가
     InteractionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     
+    // 기본 메시 설정
     if (ItemMesh)
     {
         static ConstructorHelpers::FObjectFinder<UStaticMesh> TrapMeshAsset(TEXT("/Engine/BasicShapes/Cylinder"));
@@ -32,38 +33,51 @@ ACYTrapBase::ACYTrapBase()
         ItemMesh->SetVisibility(true);
     }
 
-    // ✅ 생성자에서는 기본값 설정 안함 (GA_PlaceTrap에서 설정하도록)
+    // ✅ 기본값 설정 제거 - GA_PlaceTrap에서 처리
 }
 
 void ACYTrapBase::BeginPlay()
 {
     Super::BeginPlay();
 
-    // ✅ BeginPlay에서만 ItemEffects가 비어있으면 기본값 설정
-    if (ItemEffects.Num() == 0)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("No custom effects, using default ImmobilizeTrap"));
-        ItemEffects.Add(UGE_ImmobilizeTrap::StaticClass());
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Trap using %d custom effects"), ItemEffects.Num());
-    }
+    // ✅ ItemEffects 검증만 수행 (설정은 GA_PlaceTrap에서 완료)
+    UE_LOG(LogTemp, Log, TEXT("Trap armed with %d effects"), ItemEffects.Num());
 
     if (HasAuthority())
     {
-        GetWorld()->GetTimerManager().SetTimer(ArmingTimer, this, &ACYTrapBase::ArmTrap, ArmingDelay, false);
-        GetWorld()->GetTimerManager().SetTimer(LifetimeTimer, [this]()
-        {
-            Destroy();
-        }, TrapLifetime, false);
+        SetupTrapTimers();
     }
+}
+
+void ACYTrapBase::SetupTrapTimers()
+{
+    // 트랩 활성화 타이머
+    GetWorld()->GetTimerManager().SetTimer(ArmingTimer, this, &ACYTrapBase::ArmTrap, ArmingDelay, false);
+    
+    // 트랩 수명 타이머
+    GetWorld()->GetTimerManager().SetTimer(LifetimeTimer, [this]()
+    {
+        Destroy();
+    }, TrapLifetime, false);
 }
 
 void ACYTrapBase::ArmTrap()
 {
+    if (!HasAuthority()) return;
+
     bIsArmed = true;
 
+    // ✅ 이 시점에서 효과 개수 확인 및 로그 출력
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Trap armed with %d effects"), ItemEffects.Num());
+    for (int32 i = 0; i < ItemEffects.Num(); i++)
+    {
+        if (ItemEffects[i])
+        {
+            UE_LOG(LogTemp, Warning, TEXT("  Effect[%d]: %s"), i, *ItemEffects[i]->GetName());
+        }
+    }
+
+    // 트리거 영역 설정
     if (!InteractionSphere)
     {
         InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("TriggerSphere"));
@@ -75,10 +89,11 @@ void ACYTrapBase::ArmTrap()
     InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
     
+    // 기존 바인딩 제거 후 트리거 바인딩
     InteractionSphere->OnComponentBeginOverlap.Clear();
     InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnTrapTriggered);
 
-    UE_LOG(LogTemp, Warning, TEXT("Trap armed"));
+    UE_LOG(LogTemp, Log, TEXT("✅ Trap armed and ready"));
 }
 
 void ACYTrapBase::OnTrapTriggered(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
@@ -90,28 +105,37 @@ void ACYTrapBase::OnTrapTriggered(UPrimitiveComponent* OverlappedComponent, AAct
     ACYPlayerCharacter* Target = Cast<ACYPlayerCharacter>(OtherActor);
     if (!Target) return;
 
+    ApplyTrapEffectsToTarget(Target);
+    Destroy();
+}
+
+void ACYTrapBase::ApplyTrapEffectsToTarget(ACYPlayerCharacter* Target)
+{
     UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
     if (!TargetASC) return;
 
     UE_LOG(LogTemp, Warning, TEXT("Trap triggered on %s with %d effects"), 
            *Target->GetName(), ItemEffects.Num());
 
-    // 효과들 적용
+    // 모든 효과 적용
     for (TSubclassOf<UGameplayEffect> EffectClass : ItemEffects)
     {
         if (EffectClass)
         {
-            FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
-            EffectContext.AddSourceObject(this);
-            
-            FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(EffectClass, 1, EffectContext);
-            if (EffectSpec.IsValid())
-            {
-                TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
-                UE_LOG(LogTemp, Warning, TEXT("Applied effect: %s"), *EffectClass->GetName());
-            }
+            ApplySingleEffect(TargetASC, EffectClass);
         }
     }
+}
 
-    Destroy();
+void ACYTrapBase::ApplySingleEffect(UAbilitySystemComponent* TargetASC, TSubclassOf<UGameplayEffect> EffectClass)
+{
+    FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
+    EffectContext.AddSourceObject(this);
+    
+    FGameplayEffectSpecHandle EffectSpec = TargetASC->MakeOutgoingSpec(EffectClass, 1, EffectContext);
+    if (EffectSpec.IsValid())
+    {
+        TargetASC->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
+        UE_LOG(LogTemp, Log, TEXT("Applied effect: %s"), *EffectClass->GetName());
+    }
 }

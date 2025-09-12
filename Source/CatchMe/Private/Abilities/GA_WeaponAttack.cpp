@@ -13,17 +13,14 @@ UGA_WeaponAttack::UGA_WeaponAttack()
 
     const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
 
-    // 🔥 AbilityTags deprecated 경고 해결 - SetAssetTags 사용
     FGameplayTagContainer AssetTags;
     AssetTags.AddTag(GameplayTags.Ability_Weapon_Attack);
     SetAssetTags(AssetTags);
     
-    // Activation Owned Tags
     FGameplayTagContainer OwnedTags;
     OwnedTags.AddTag(GameplayTags.State_Attacking);
     ActivationOwnedTags = OwnedTags;
     
-    // Activation Blocked Tags
     FGameplayTagContainer BlockedTags;
     BlockedTags.AddTag(GameplayTags.State_Stunned);
     BlockedTags.AddTag(GameplayTags.State_Dead);
@@ -35,35 +32,26 @@ void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     const FGameplayAbilityActivationInfo ActivationInfo,
     const FGameplayEventData* TriggerEventData)
 {
-    UE_LOG(LogTemp, Warning, TEXT("UGA_WeaponAttack::ActivateAbility called"));
-    
     if (!HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
     {
-        UE_LOG(LogTemp, Warning, TEXT("WeaponAttack: No authority or prediction key - ending ability"));
         EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
         return;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("WeaponAttack: Authority check passed"));
-
-    const FGameplayTagContainer* CooldownTags = GetCooldownTags();
-    if (CooldownTags && ActorInfo->AbilitySystemComponent->HasAnyMatchingGameplayTags(*CooldownTags))
+    // 쿨다운 체크
+    if (IsOnCooldown(ActorInfo))
     {
-        UE_LOG(LogTemp, Warning, TEXT("WeaponAttack: On cooldown - ending ability"));
         EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
         return;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("WeaponAttack: Performing attack"));
+    // 공격 수행
     PerformAttack();
 
-    FGameplayEffectSpecHandle CooldownSpec = MakeOutgoingGameplayEffectSpec(UGE_WeaponAttackCooldown::StaticClass(), 1);
-    if (CooldownSpec.IsValid())
-    {
-        ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CooldownSpec);
-    }
+    // 쿨다운 적용
+    ApplyCooldown(Handle, ActorInfo, ActivationInfo);
 
-    UE_LOG(LogTemp, Warning, TEXT("WeaponAttack: Ability completed"));
+    UE_LOG(LogTemp, Log, TEXT("Weapon attack completed"));
     EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }
 
@@ -78,37 +66,52 @@ void UGA_WeaponAttack::PerformAttack()
     FHitResult HitResult;
     if (WeaponComp->PerformLineTrace(HitResult))
     {
-        if (AActor* Target = HitResult.GetActor())
-        {
-            UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
-            if (TargetASC)
-            {
-                float Damage = 50.0f;
-                
-                if (UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo())
-                {
-                    FGameplayAttribute AttackPowerAttribute = UCYAttributeSet::GetAttackPowerAttribute();
-                    if (SourceASC->HasAttributeSetForAttribute(AttackPowerAttribute))
-                    {
-                        Damage = SourceASC->GetNumericAttribute(AttackPowerAttribute);
-                    }
-                }
+        ProcessHitTarget(HitResult);
+    }
+}
 
-                FGameplayEffectContextHandle EffectContext = GetAbilitySystemComponentFromActorInfo()->MakeEffectContext();
-                EffectContext.AddSourceObject(OwnerActor);
-                EffectContext.AddHitResult(HitResult);
+bool UGA_WeaponAttack::IsOnCooldown(const FGameplayAbilityActorInfo* ActorInfo) const
+{
+    const FGameplayTagContainer* CooldownTags = GetCooldownTags();
+    return CooldownTags && ActorInfo->AbilitySystemComponent->HasAnyMatchingGameplayTags(*CooldownTags);
+}
 
-                FGameplayEffectSpecHandle DamageSpec = MakeOutgoingGameplayEffectSpec(UGE_WeaponDamage::StaticClass(), 1);
-                if (DamageSpec.IsValid())
-                {
-                    GetAbilitySystemComponentFromActorInfo()->ApplyGameplayEffectSpecToTarget(
-                        *DamageSpec.Data.Get(),
-                        TargetASC
-                    );
+void UGA_WeaponAttack::ProcessHitTarget(const FHitResult& HitResult)
+{
+    AActor* Target = HitResult.GetActor();
+    if (!Target) return;
 
-                    UE_LOG(LogTemp, Warning, TEXT("Applied %f damage to %s"), Damage, *Target->GetName());
-                }
-            }
-        }
+    UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
+    if (!TargetASC) return;
+
+    ApplyDamageToTarget(TargetASC, HitResult);
+}
+
+void UGA_WeaponAttack::ApplyDamageToTarget(UAbilitySystemComponent* TargetASC, const FHitResult& HitResult)
+{
+    FGameplayEffectContextHandle EffectContext = GetAbilitySystemComponentFromActorInfo()->MakeEffectContext();
+    EffectContext.AddSourceObject(GetAvatarActorFromActorInfo());
+    EffectContext.AddHitResult(HitResult);
+
+    FGameplayEffectSpecHandle DamageSpec = MakeOutgoingGameplayEffectSpec(UGE_WeaponDamage::StaticClass(), 1);
+    if (DamageSpec.IsValid())
+    {
+        GetAbilitySystemComponentFromActorInfo()->ApplyGameplayEffectSpecToTarget(
+            *DamageSpec.Data.Get(),
+            TargetASC
+        );
+
+        UE_LOG(LogTemp, Log, TEXT("Applied weapon damage to %s"), *HitResult.GetActor()->GetName());
+    }
+}
+
+void UGA_WeaponAttack::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, 
+    const FGameplayAbilityActorInfo* ActorInfo, 
+    const FGameplayAbilityActivationInfo ActivationInfo)
+{
+    FGameplayEffectSpecHandle CooldownSpec = MakeOutgoingGameplayEffectSpec(UGE_WeaponAttackCooldown::StaticClass(), 1);
+    if (CooldownSpec.IsValid())
+    {
+        ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, CooldownSpec);
     }
 }

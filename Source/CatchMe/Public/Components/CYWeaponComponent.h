@@ -2,11 +2,11 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "GameplayTagContainer.h"
 #include "CYWeaponComponent.generated.h"
 
 class ACYWeaponBase;
-class UAbilitySystemComponent;
+class UCYAbilitySystemComponent;
+class USkeletalMeshComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnWeaponChanged, ACYWeaponBase*, OldWeapon, ACYWeaponBase*, NewWeapon);
 
@@ -44,12 +44,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
 	bool PerformLineTrace(FHitResult& OutHit, float Range = 1000.0f);
 
+	// ✅ 클라이언트 RPC로 인벤토리 상태 표시
+	UFUNCTION(Client, Reliable, Category = "Weapon")
+	void ClientDisplayInventoryStatus();
+
 protected:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION()
 	void OnRep_CurrentWeapon();
 
-	UAbilitySystemComponent* GetOwnerASC() const;
+	// 헬퍼 함수들
+	UCYAbilitySystemComponent* GetOwnerAbilitySystemComponent() const;
 	USkeletalMeshComponent* GetOwnerMesh() const;
+	void AttachWeaponToOwner(ACYWeaponBase* Weapon);
+	void DisableWeaponInteraction(ACYWeaponBase* Weapon);
 };
