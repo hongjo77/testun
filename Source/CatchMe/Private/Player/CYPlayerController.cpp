@@ -3,6 +3,9 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
+#include "Components/CYInventoryComponent.h"
+#include "Components/CYWeaponComponent.h"
+#include "Items/CYItemBase.h"
 
 ACYPlayerController::ACYPlayerController()
 {
@@ -119,7 +122,23 @@ void ACYPlayerController::InteractPressed()
 
 void ACYPlayerController::PrimaryAttackPressed()
 {
-    ServerAttackPressed();
+    // ✅ 클라이언트에서만 인벤토리 표시 (데디케이티드 서버 대응)
+    if (IsLocalController())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("🖱️ PrimaryAttackPressed - IsLocalController: true"));
+        DisplayInventoryOnClient();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("🖱️ PrimaryAttackPressed - IsLocalController: false"));
+    }
+
+    // 무기가 있으면 서버에서 공격 처리
+    ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn());
+    if (PlayerCharacter && PlayerCharacter->WeaponComponent && PlayerCharacter->WeaponComponent->CurrentWeapon)
+    {
+        ServerAttackPressed();
+    }
 }
 
 void ACYPlayerController::ServerAttackPressed_Implementation()
@@ -147,4 +166,98 @@ void ACYPlayerController::UseInventorySlot(int32 SlotIndex)
     {
         PlayerCharacter->UseInventorySlot(SlotIndex);
     }
+}
+
+void ACYPlayerController::DisplayInventoryOnClient()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🖱️ DisplayInventoryOnClient called"));
+    
+    ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn());
+    if (!PlayerCharacter)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ No PlayerCharacter"));
+        return;
+    }
+
+    UCYInventoryComponent* InventoryComp = PlayerCharacter->InventoryComponent;
+    UCYWeaponComponent* WeaponComp = PlayerCharacter->WeaponComponent;
+    
+    if (!InventoryComp)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ No InventoryComponent"));
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("❌ No InventoryComponent found"));
+        }
+        return;
+    }
+
+    if (!GEngine)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ GEngine is NULL"));
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("✅ All components found, displaying inventory"));
+
+    // 기존 메시지 제거
+    GEngine->ClearOnScreenDebugMessages();
+
+    // 인벤토리 상태 표시
+    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow, TEXT("=== 📦 INVENTORY STATUS ==="));
+    
+    // 무기 슬롯 (1~3번 키)
+    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Cyan, TEXT("🗡️ WEAPONS (Keys 1-3):"));
+    for (int32 i = 0; i < InventoryComp->WeaponSlots.Num(); ++i)
+    {
+        FString WeaponInfo;
+        if (InventoryComp->WeaponSlots[i])
+        {
+            WeaponInfo = FString::Printf(TEXT("  [%d] %s x%d"), 
+                i + 1, 
+                *InventoryComp->WeaponSlots[i]->ItemName.ToString(), 
+                InventoryComp->WeaponSlots[i]->ItemCount
+            );
+            
+            if (WeaponComp && WeaponComp->CurrentWeapon == InventoryComp->WeaponSlots[i])
+            {
+                WeaponInfo += TEXT(" ⭐ EQUIPPED");
+                GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, WeaponInfo);
+            }
+            else
+            {
+                GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::White, WeaponInfo);
+            }
+        }
+        else
+        {
+            WeaponInfo = FString::Printf(TEXT("  [%d] Empty"), i + 1);
+            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, WeaponInfo);
+        }
+    }
+    
+    // 아이템 슬롯 (4~9번 키)
+    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Cyan, TEXT("🎒 ITEMS (Keys 4-9):"));
+    int32 MaxDisplayItems = FMath::Min(6, InventoryComp->ItemSlots.Num());
+    for (int32 i = 0; i < MaxDisplayItems; ++i)
+    {
+        FString ItemInfo;
+        if (InventoryComp->ItemSlots[i])
+        {
+            ItemInfo = FString::Printf(TEXT("  [%d] %s x%d"), 
+                i + 4, 
+                *InventoryComp->ItemSlots[i]->ItemName.ToString(), 
+                InventoryComp->ItemSlots[i]->ItemCount
+            );
+            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::White, ItemInfo);
+        }
+        else
+        {
+            ItemInfo = FString::Printf(TEXT("  [%d] Empty"), i + 4);
+            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, ItemInfo);
+        }
+    }
+    
+    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow, TEXT("=================="));
+    UE_LOG(LogTemp, Warning, TEXT("✅ Inventory displayed successfully"));
 }

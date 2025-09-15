@@ -60,17 +60,92 @@ bool UCYWeaponComponent::PerformAttack()
     // 서버에서만 실행
     if (!GetOwner()->HasAuthority()) return false;
 
-    // 무기가 있으면 공격, 없으면 인벤토리 표시
+    // 무기가 있으면 공격만 수행
     if (CurrentWeapon) 
     {
         return ExecuteWeaponAttack();
     }
-    else
+    
+    return false;
+}
+
+void UCYWeaponComponent::DisplayInventoryStatus()
+{
+    // ✅ 클라이언트에서 직접 호출 가능한 일반 함수
+    if (!GEngine) return;
+
+    UCYInventoryComponent* InventoryComp = GetOwner()->FindComponentByClass<UCYInventoryComponent>();
+    if (!InventoryComp)
     {
-        // 클라이언트에 인벤토리 표시 요청
-        ClientDisplayInventoryStatus();
-        return true;
+        GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("❌ No InventoryComponent found"));
+        return;
     }
+
+    // 기존 메시지 제거
+    GEngine->ClearOnScreenDebugMessages();
+
+    // 인벤토리 상태 표시
+    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow, TEXT("=== 📦 INVENTORY STATUS ==="));
+    
+    // 무기 슬롯 (1~3번 키)
+    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Cyan, TEXT("🗡️ WEAPONS (Keys 1-3):"));
+    for (int32 i = 0; i < InventoryComp->WeaponSlots.Num(); ++i)
+    {
+        FString WeaponInfo;
+        if (InventoryComp->WeaponSlots[i])
+        {
+            WeaponInfo = FString::Printf(TEXT("  [%d] %s x%d"), 
+                i + 1, 
+                *InventoryComp->WeaponSlots[i]->ItemName.ToString(), 
+                InventoryComp->WeaponSlots[i]->ItemCount
+            );
+            
+            if (CurrentWeapon == InventoryComp->WeaponSlots[i])
+            {
+                WeaponInfo += TEXT(" ⭐ EQUIPPED");
+                GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, WeaponInfo);
+            }
+            else
+            {
+                GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::White, WeaponInfo);
+            }
+        }
+        else
+        {
+            WeaponInfo = FString::Printf(TEXT("  [%d] Empty"), i + 1);
+            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, WeaponInfo);
+        }
+    }
+    
+    // 아이템 슬롯 (4~9번 키)
+    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Cyan, TEXT("🎒 ITEMS (Keys 4-9):"));
+    int32 MaxDisplayItems = FMath::Min(6, InventoryComp->ItemSlots.Num());
+    for (int32 i = 0; i < MaxDisplayItems; ++i)
+    {
+        FString ItemInfo;
+        if (InventoryComp->ItemSlots[i])
+        {
+            ItemInfo = FString::Printf(TEXT("  [%d] %s x%d"), 
+                i + 4, 
+                *InventoryComp->ItemSlots[i]->ItemName.ToString(), 
+                InventoryComp->ItemSlots[i]->ItemCount
+            );
+            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::White, ItemInfo);
+        }
+        else
+        {
+            ItemInfo = FString::Printf(TEXT("  [%d] Empty"), i + 4);
+            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, ItemInfo);
+        }
+    }
+    
+    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow, TEXT("=================="));
+}
+
+void UCYWeaponComponent::ClientDisplayInventoryStatus_Implementation()
+{
+    // ✅ RPC 버전은 일반 함수 호출
+    DisplayInventoryStatus();
 }
 
 bool UCYWeaponComponent::ExecuteWeaponAttack()
@@ -158,76 +233,4 @@ void UCYWeaponComponent::DisableWeaponInteraction(ACYWeaponBase* Weapon)
     {
         Weapon->InteractionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     }
-}
-
-void UCYWeaponComponent::ClientDisplayInventoryStatus_Implementation()
-{
-    if (!GEngine) return;
-
-    UCYInventoryComponent* InventoryComp = GetOwner()->FindComponentByClass<UCYInventoryComponent>();
-    if (!InventoryComp)
-    {
-        GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("❌ No InventoryComponent found"));
-        return;
-    }
-
-    // 기존 메시지 제거
-    GEngine->ClearOnScreenDebugMessages();
-
-    // 인벤토리 상태 표시
-    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow, TEXT("=== 📦 INVENTORY STATUS ==="));
-    
-    // 무기 슬롯 (1~3번 키)
-    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Cyan, TEXT("🗡️ WEAPONS (Keys 1-3):"));
-    for (int32 i = 0; i < InventoryComp->WeaponSlots.Num(); ++i)
-    {
-        FString WeaponInfo;
-        if (InventoryComp->WeaponSlots[i])
-        {
-            WeaponInfo = FString::Printf(TEXT("  [%d] %s x%d"), 
-                i + 1, 
-                *InventoryComp->WeaponSlots[i]->ItemName.ToString(), 
-                InventoryComp->WeaponSlots[i]->ItemCount
-            );
-            
-            if (CurrentWeapon == InventoryComp->WeaponSlots[i])
-            {
-                WeaponInfo += TEXT(" ⭐ EQUIPPED");
-                GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, WeaponInfo);
-            }
-            else
-            {
-                GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::White, WeaponInfo);
-            }
-        }
-        else
-        {
-            WeaponInfo = FString::Printf(TEXT("  [%d] Empty"), i + 1);
-            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, WeaponInfo);
-        }
-    }
-    
-    // 아이템 슬롯 (4~9번 키)
-    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Cyan, TEXT("🎒 ITEMS (Keys 4-9):"));
-    int32 MaxDisplayItems = FMath::Min(6, InventoryComp->ItemSlots.Num());
-    for (int32 i = 0; i < MaxDisplayItems; ++i)
-    {
-        FString ItemInfo;
-        if (InventoryComp->ItemSlots[i])
-        {
-            ItemInfo = FString::Printf(TEXT("  [%d] %s x%d"), 
-                i + 4, 
-                *InventoryComp->ItemSlots[i]->ItemName.ToString(), 
-                InventoryComp->ItemSlots[i]->ItemCount
-            );
-            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::White, ItemInfo);
-        }
-        else
-        {
-            ItemInfo = FString::Printf(TEXT("  [%d] Empty"), i + 4);
-            GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Green, ItemInfo);
-        }
-    }
-    
-    GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow, TEXT("=================="));
 }

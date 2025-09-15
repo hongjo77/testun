@@ -100,84 +100,65 @@ void UGA_PlaceTrap::ConfigureTrapEffects(ACYTrapBase* Trap, const FGameplayEvent
     Trap->ItemEffects.Empty();
     Trap->ItemEffects.Add(UGE_ImmobilizeTrap::StaticClass());
 
-    // ✅ 방법 1: GameplayEventData에서 아이템 정보 가져오기 (우선)
-    if (TriggerEventData && TriggerEventData->OptionalObject)
-    {
-        const UObject* OptionalObj = TriggerEventData->OptionalObject;
-        if (OptionalObj)
-        {
-            if (const ACYItemBase* UsedItem = Cast<ACYItemBase>(OptionalObj))
-            {
-                UE_LOG(LogTemp, Warning, TEXT("✅ Found item from EventData: %s with %d DesiredTrapEffects"), 
-                       *UsedItem->ItemName.ToString(), UsedItem->DesiredTrapEffects.Num());
-                
-                if (UsedItem->DesiredTrapEffects.Num() > 0)
-                {
-                    Trap->ItemEffects = UsedItem->DesiredTrapEffects;
-                    UE_LOG(LogTemp, Warning, TEXT("🎯 Trap configured with %d CUSTOM effects from EventData"), 
-                           UsedItem->DesiredTrapEffects.Num());
-                    
-                    // 각 효과 클래스 이름 로그
-                    for (int32 i = 0; i < UsedItem->DesiredTrapEffects.Num(); i++)
-                    {
-                        if (UsedItem->DesiredTrapEffects[i])
-                        {
-                            UE_LOG(LogTemp, Warning, TEXT("  🔥 Effect[%d]: %s"), i, *UsedItem->DesiredTrapEffects[i]->GetName());
-                        }
-                    }
-                    return;
-                }
-            }
-        }
-    }
-
-    // ✅ 방법 2: CurrentSpec의 SourceObject에서 아이템 정보 가져오기 (백업)
+    // ✅ SourceObject에서 아이템 정보 가져오기 (단일 방법)
     const FGameplayAbilitySpec* CurrentSpec = GetCurrentAbilitySpec();
-    if (CurrentSpec && CurrentSpec->SourceObject.IsValid())
+    if (CurrentSpec)
     {
-        UObject* SourceObjectPtr = CurrentSpec->SourceObject.Get();
-        if (SourceObjectPtr)
+        UE_LOG(LogTemp, Warning, TEXT("✅ CurrentSpec found"));
+        
+        if (CurrentSpec->SourceObject.IsValid())
         {
-            if (const ACYItemBase* UsedItem = Cast<ACYItemBase>(SourceObjectPtr))
+            UObject* SourceObjectPtr = CurrentSpec->SourceObject.Get();
+            UE_LOG(LogTemp, Warning, TEXT("✅ SourceObject is valid: %s"), 
+                   SourceObjectPtr ? *SourceObjectPtr->GetName() : TEXT("NULL"));
+            
+            if (SourceObjectPtr)
             {
-                UE_LOG(LogTemp, Warning, TEXT("✅ Found item from SourceObject: %s with %d DesiredTrapEffects"), 
-                       *UsedItem->ItemName.ToString(), UsedItem->DesiredTrapEffects.Num());
-                
-                if (UsedItem->DesiredTrapEffects.Num() > 0)
+                if (const ACYItemBase* UsedItem = Cast<ACYItemBase>(SourceObjectPtr))
                 {
-                    Trap->ItemEffects = UsedItem->DesiredTrapEffects;
-                    UE_LOG(LogTemp, Warning, TEXT("🎯 Trap configured with %d CUSTOM effects from SourceObject"), 
-                           UsedItem->DesiredTrapEffects.Num());
+                    UE_LOG(LogTemp, Warning, TEXT("✅ Successfully cast to ACYItemBase: %s with %d DesiredTrapEffects"), 
+                           *UsedItem->ItemName.ToString(), UsedItem->DesiredTrapEffects.Num());
                     
-                    // 각 효과 클래스 이름 로그
-                    for (int32 i = 0; i < UsedItem->DesiredTrapEffects.Num(); i++)
+                    if (UsedItem->DesiredTrapEffects.Num() > 0)
                     {
-                        if (UsedItem->DesiredTrapEffects[i])
+                        Trap->ItemEffects = UsedItem->DesiredTrapEffects;
+                        UE_LOG(LogTemp, Warning, TEXT("🎯 Trap configured with %d CUSTOM effects from SourceObject"), 
+                               UsedItem->DesiredTrapEffects.Num());
+                        
+                        // 각 효과 클래스 이름 로그
+                        for (int32 i = 0; i < UsedItem->DesiredTrapEffects.Num(); i++)
                         {
-                            UE_LOG(LogTemp, Warning, TEXT("  🔥 Effect[%d]: %s"), i, *UsedItem->DesiredTrapEffects[i]->GetName());
+                            if (UsedItem->DesiredTrapEffects[i])
+                            {
+                                UE_LOG(LogTemp, Warning, TEXT("  🔥 Effect[%d]: %s"), i, *UsedItem->DesiredTrapEffects[i]->GetName());
+                            }
                         }
+                        return;
                     }
-                    return;
+                    else
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("❌ DesiredTrapEffects is empty"));
+                    }
                 }
-            }
-            else
-            {
-                UE_LOG(LogTemp, Error, TEXT("❌ SourceObject is not ACYItemBase. Object class: %s"), 
-                       *SourceObjectPtr->GetClass()->GetName());
+                else
+                {
+                    UE_LOG(LogTemp, Error, TEXT("❌ SourceObject is not ACYItemBase. Object class: %s"), 
+                           *SourceObjectPtr->GetClass()->GetName());
+                }
             }
         }
         else
         {
-            UE_LOG(LogTemp, Error, TEXT("❌ SourceObject.Get() returned NULL"));
+            UE_LOG(LogTemp, Error, TEXT("❌ SourceObject is NOT valid"));
         }
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ CurrentSpec or SourceObject is invalid"));
+        UE_LOG(LogTemp, Error, TEXT("❌ CurrentSpec is NULL"));
     }
 
     // 기본 효과 사용
-    UE_LOG(LogTemp, Warning, TEXT("❌ No custom effects found, using default ImmobilizeTrap effect"));
+    UE_LOG(LogTemp, Warning, TEXT("❌ Using default ImmobilizeTrap effect"));
 }
 
 void UGA_PlaceTrap::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, 

@@ -91,6 +91,8 @@ protected:
     void UseInventorySlot8();
     void UseInventorySlot9();
 
+    void DisplayInventoryOnClient();
+
 private:
     void UseInventorySlot(int32 SlotIndex);
 };

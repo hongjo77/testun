@@ -44,7 +44,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
 	bool PerformLineTrace(FHitResult& OutHit, float Range = 1000.0f);
 
-	// 클라이언트 RPC로 인벤토리 상태 표시
+	// ✅ 클라이언트에서 직접 호출 가능한 인벤토리 표시
+	UFUNCTION(BlueprintCallable, Category = "Weapon")
+	void DisplayInventoryStatus();
+
+	// 클라이언트 RPC로 인벤토리 상태 표시 (백업용)
 	UFUNCTION(Client, Reliable, Category = "Weapon")
 	void ClientDisplayInventoryStatus();
 
