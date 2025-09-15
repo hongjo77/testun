@@ -1,3 +1,4 @@
+// CYPlayerCharacter.cpp - 정리된 버전
 #include "Player/CYPlayerCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -156,7 +157,6 @@ void ACYPlayerCharacter::InitializeAbilitySystem()
 {
     if (!AbilitySystemComponent) return;
 
-    // 수정된 부분: 타입 에러 완전 해결
     AbilitySystemComponent->InitAbilityActorInfo(this, this);
 
     if (HasAuthority())
@@ -170,23 +170,13 @@ void ACYPlayerCharacter::GrantDefaultAbilities()
 {
     if (!AbilitySystemComponent || !HasAuthority()) return;
 
-    UE_LOG(LogTemp, Warning, TEXT("🎯 GrantDefaultAbilities: %d abilities to grant"), DefaultAbilities.Num());
-
     for (int32 i = 0; i < DefaultAbilities.Num(); ++i)
     {
         TSubclassOf<UGameplayAbility>& AbilityClass = DefaultAbilities[i];
         if (AbilityClass)
         {
             FGameplayAbilitySpec AbilitySpec(AbilityClass, 1, INDEX_NONE, this);
-            FGameplayAbilitySpecHandle Handle = AbilitySystemComponent->GiveAbility(AbilitySpec);
-            
-            UE_LOG(LogTemp, Warning, TEXT("✅ Granted ability: %s (Handle valid: %s)"), 
-                   *AbilityClass->GetName(),
-                   Handle.IsValid() ? TEXT("true") : TEXT("false"));
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("❌ DefaultAbilities[%d] is null!"), i);
+            AbilitySystemComponent->GiveAbility(AbilitySpec);
         }
     }
 }

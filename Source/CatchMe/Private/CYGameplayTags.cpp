@@ -5,7 +5,22 @@ FCYGameplayTags FCYGameplayTags::GameplayTags;
 
 void FCYGameplayTags::InitializeNativeTags()
 {
+    // ✅ 이미 초기화되었는지 확인
+    static bool bInitialized = false;
+    if (bInitialized)
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("GameplayTags already initialized"));
+        return;
+    }
+
     UGameplayTagsManager& Manager = UGameplayTagsManager::Get();
+
+    // ✅ Manager가 준비되었는지 확인
+    if (!Manager.ShouldImportTagsFromINI())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("GameplayTagsManager not ready yet, deferring initialization"));
+        return;
+    }
 
     // ============ 어빌리티 태그 등록 ============
     GameplayTags.Ability_Weapon_Attack = Manager.AddNativeGameplayTag(
@@ -77,4 +92,7 @@ void FCYGameplayTags::InitializeNativeTags()
         FName("Data.Damage"),
         FString("데미지 데이터")
     );
+
+    bInitialized = true;
+    UE_LOG(LogTemp, Warning, TEXT("✅ GameplayTags successfully initialized"));
 }

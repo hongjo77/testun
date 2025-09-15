@@ -32,13 +32,15 @@ ACYItemBase::ACYItemBase()
     InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+    
+    // ✅ 중요: ObjectType을 WorldDynamic으로 설정
+    InteractionSphere->SetCollisionObjectType(ECC_WorldDynamic);
 
     // 기본 아이템 태그
     const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
     ItemTag = GameplayTags.Item_Base;
     
     bIsPickedUp = false;
-
     ItemCount = 1;
     MaxStackCount = 10;
 }

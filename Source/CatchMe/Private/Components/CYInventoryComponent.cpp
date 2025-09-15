@@ -105,29 +105,49 @@ ACYItemBase* UCYInventoryComponent::GetItem(int32 SlotIndex) const
 
 bool UCYInventoryComponent::UseItem(int32 SlotIndex)
 {
-    if (!GetOwner()->HasAuthority()) return false;
+    UE_LOG(LogTemp, Warning, TEXT("📦 UCYInventoryComponent::UseItem called with SlotIndex: %d"), SlotIndex);
+
+    if (!GetOwner()->HasAuthority()) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("📦 Not authority, calling ServerUseItem"));
+        ServerUseItem(SlotIndex);
+        return false; // ✅ 여기서 리턴해서 중복 실행 방지
+    }
 
     ACYItemBase* Item = GetItem(SlotIndex);
-    if (!Item) return false;
+    UE_LOG(LogTemp, Warning, TEXT("📦 GetItem result: %s"), Item ? *Item->ItemName.ToString() : TEXT("NULL"));
+    
+    if (!Item) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ No item found at SlotIndex: %d"), SlotIndex);
+        return false;
+    }
 
     // ✅ 개선된 시스템으로 슬롯 타입 확인
     EInventorySlotType SlotType;
     int32 LocalIndex;
     UInventorySlotUtils::ParseSlotIndex(SlotIndex, SlotType, LocalIndex);
+    
+    UE_LOG(LogTemp, Warning, TEXT("📦 SlotType: %s, LocalIndex: %d"), 
+           SlotType == EInventorySlotType::Weapon ? TEXT("Weapon") : TEXT("Item"), LocalIndex);
 
     // 무기 장착
     if (SlotType == EInventorySlotType::Weapon)
     {
+        UE_LOG(LogTemp, Warning, TEXT("📦 Trying to equip weapon"));
         return EquipWeaponFromSlot(Item);
     }
 
     // 일반 아이템 사용
+    UE_LOG(LogTemp, Warning, TEXT("📦 Trying to activate item ability for: %s"), *Item->ItemName.ToString());
     return ActivateItemAbility(Item, LocalIndex);
 }
 
 void UCYInventoryComponent::ServerUseItem_Implementation(int32 SlotIndex)
 {
-    UseItem(SlotIndex);
+    UE_LOG(LogTemp, Warning, TEXT("🌐 ServerUseItem called with SlotIndex: %d"), SlotIndex);
+    bool bResult = UseItem(SlotIndex);
+    UE_LOG(LogTemp, Warning, TEXT("🌐 ServerUseItem result: %s"), bResult ? TEXT("SUCCESS") : TEXT("FAILED"));
 }
 
 // ============ 기존 핵심 로직 (유지) ============
@@ -257,18 +277,46 @@ bool UCYInventoryComponent::EquipWeaponFromSlot(ACYItemBase* Item)
 
 bool UCYInventoryComponent::ActivateItemAbility(ACYItemBase* Item, int32 SlotIndex)
 {
+    UE_LOG(LogTemp, Warning, TEXT("⚡ ActivateItemAbility called for item: %s"), 
+           Item ? *Item->ItemName.ToString() : TEXT("NULL"));
+
     UAbilitySystemComponent* ASC = GetOwnerASC();
-    if (!ASC || !Item->ItemAbility) return false;
+    if (!ASC) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ No AbilitySystemComponent found"));
+        return false;
+    }
+
+    if (!Item->ItemAbility) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ Item has no ItemAbility: %s"), *Item->ItemName.ToString());
+        return false;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("⚡ Looking for ability: %s"), *Item->ItemAbility->GetName());
 
     FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Item->ItemAbility);
-    if (!Spec) return false;
+    if (!Spec) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ Ability spec not found for: %s"), *Item->ItemAbility->GetName());
+        return false;
+    }
 
+    // ✅ SourceObject를 설정하고 어빌리티 활성화
+    UE_LOG(LogTemp, Warning, TEXT("⚡ Found ability spec, setting SourceObject to: %s"), *Item->GetName());
     Spec->SourceObject = Item;
     
-    bool bSuccess = ASC->TryActivateAbility(Spec->Handle);
+    // ✅ 어빌리티 활성화 전에 아이템 정보 미리 저장
+    FGameplayTag ConsumableTag = FGameplayTag::RequestGameplayTag("Item.Consumable");
+    FGameplayTag TrapTag = FGameplayTag::RequestGameplayTag("Item.Trap");
+    bool bShouldConsume = Item->ItemTag.MatchesTag(ConsumableTag) || Item->ItemTag.MatchesTag(TrapTag);
     
-    if (bSuccess)
+    bool bSuccess = ASC->TryActivateAbility(Spec->Handle);
+    UE_LOG(LogTemp, Warning, TEXT("⚡ TryActivateAbility result: %s"), bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
+    
+    if (bSuccess && bShouldConsume)
     {
+        UE_LOG(LogTemp, Warning, TEXT("⚡ Ability activated successfully, processing item consumption"));
         ProcessItemConsumption(Item, SlotIndex);
     }
     

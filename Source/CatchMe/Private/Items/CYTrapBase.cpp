@@ -55,22 +55,20 @@ void ACYTrapBase::BeginPlay()
 {
     Super::BeginPlay();
 
-    // ✅ 서버와 클라이언트 모두에서 상태별 트랩 설정
+    // ✅ 모든 클라이언트에서 상태별 트랩 설정
     SetupTrapForCurrentState();
     
     if (HasAuthority())
     {
-        // 트랩 스폰 이벤트
         OnTrapSpawned();
-        
-        // 시각적 설정
         SetupTrapVisuals();
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("🎯 Trap BeginPlay: %s (State: %s, Authority: %s)"), 
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Trap BeginPlay: %s (State: %s, Authority: %s, CollisionEnabled: %s)"), 
            *ItemName.ToString(), 
            TrapState == ETrapState::MapPlaced ? TEXT("MapPlaced") : TEXT("PlayerPlaced"),
-           HasAuthority() ? TEXT("Server") : TEXT("Client"));
+           HasAuthority() ? TEXT("Server") : TEXT("Client"),
+           InteractionSphere ? (InteractionSphere->GetCollisionEnabled() != ECollisionEnabled::NoCollision ? TEXT("Enabled") : TEXT("Disabled")) : TEXT("NULL"));
 }
 
 void ACYTrapBase::SetupTrapForCurrentState()
@@ -79,11 +77,14 @@ void ACYTrapBase::SetupTrapForCurrentState()
 
     if (TrapState == ETrapState::MapPlaced)
     {
-        // ✅ 맵 배치 상태: 픽업 가능
-        InteractionSphere->SetSphereRadius(150.0f); // 픽업 범위
+        // ✅ 맵 배치 상태: 픽업 가능하도록 설정
+        InteractionSphere->SetSphereRadius(150.0f);
         InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
         InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
         InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+        
+        // ✅ 오브젝트 타입을 WorldDynamic으로 설정 (SphereOverlapActors가 찾을 수 있도록)
+        InteractionSphere->SetCollisionObjectType(ECC_WorldDynamic);
         
         // ✅ 기존 바인딩 클리어 후 새로 바인딩
         InteractionSphere->OnComponentBeginOverlap.Clear();
@@ -91,14 +92,15 @@ void ACYTrapBase::SetupTrapForCurrentState()
         InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnPickupSphereOverlap);
         InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &ACYTrapBase::OnPickupSphereEndOverlap);
         
-        UE_LOG(LogTemp, Warning, TEXT("🎯 Trap set as PICKUPABLE: %s"), *ItemName.ToString());
+        UE_LOG(LogTemp, Warning, TEXT("🎯 Trap set as PICKUPABLE: %s (Radius: %f)"), 
+               *ItemName.ToString(), InteractionSphere->GetScaledSphereRadius());
     }
     else if (TrapState == ETrapState::PlayerPlaced)
     {
         // ✅ 플레이어 배치 상태: 트리거 모드
         if (HasAuthority())
         {
-            SetupTrapTimers(); // 서버에서만 타이머 시작
+            SetupTrapTimers();
         }
         
         UE_LOG(LogTemp, Warning, TEXT("🎯 Trap set as ACTIVE: %s"), *ItemName.ToString());

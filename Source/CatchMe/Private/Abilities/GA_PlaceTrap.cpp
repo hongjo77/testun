@@ -35,8 +35,11 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     const FGameplayAbilityActivationInfo ActivationInfo,
     const FGameplayEventData* TriggerEventData)
 {
+    UE_LOG(LogTemp, Warning, TEXT("🚀 GA_PlaceTrap::ActivateAbility called"));
+    
     if (!HasAuthorityOrPredictionKey(ActorInfo, &ActivationInfo))
     {
+        UE_LOG(LogTemp, Error, TEXT("❌ GA_PlaceTrap: No authority or prediction key"));
         EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
         return;
     }
@@ -49,6 +52,8 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
         return;
     }
 
+    UE_LOG(LogTemp, Warning, TEXT("🚀 GA_PlaceTrap: OwnerActor found: %s"), *OwnerActor->GetName());
+
     // 쿨다운 체크
     const FGameplayTagContainer* CooldownTags = GetCooldownTags();
     if (CooldownTags && ActorInfo->AbilitySystemComponent->HasAnyMatchingGameplayTags(*CooldownTags))
@@ -58,12 +63,25 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
         return;
     }
 
-    // ✅ 단순한 SourceObject 방식만 사용
+    // ✅ 더 안전한 SourceObject 획득
     ACYItemBase* SourceItem = nullptr;
     const FGameplayAbilitySpec* CurrentSpec = GetCurrentAbilitySpec();
     if (CurrentSpec && CurrentSpec->SourceObject.IsValid())
     {
         SourceItem = Cast<ACYItemBase>(CurrentSpec->SourceObject.Get());
+        UE_LOG(LogTemp, Warning, TEXT("🚀 GA_PlaceTrap: SourceItem from spec: %s"), 
+               SourceItem ? *SourceItem->ItemName.ToString() : TEXT("NULL"));
+    }
+    
+    // ✅ SourceObject가 없으면 TriggerEventData에서 시도
+    if (!SourceItem && TriggerEventData && TriggerEventData->ContextHandle.IsValid())
+    {
+        if (UObject* SourceObject = TriggerEventData->ContextHandle.GetSourceObject())
+        {
+            SourceItem = Cast<ACYItemBase>(SourceObject);
+            UE_LOG(LogTemp, Warning, TEXT("🚀 GA_PlaceTrap: SourceItem from TriggerEventData: %s"), 
+                   SourceItem ? *SourceItem->ItemName.ToString() : TEXT("NULL"));
+        }
     }
 
     if (!SourceItem)
@@ -79,8 +97,10 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     // 트랩 설치 위치 계산
     FVector SpawnLocation = CalculateSpawnLocation(OwnerActor);
     FRotator SpawnRotation = OwnerActor->GetActorRotation();
+    
+    UE_LOG(LogTemp, Warning, TEXT("🚀 GA_PlaceTrap: Spawn location: %s"), *SpawnLocation.ToString());
 
-    // ✅ 팩토리를 통한 트랩 생성 (완전히 위임)
+    // ✅ 팩토리를 통한 트랩 생성
     ACYTrapBase* NewTrap = UCYTrapFactory::CreateTrapFromItem(
         GetWorld(),
         SourceItem,
@@ -103,6 +123,7 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
     // 쿨다운 적용
     ApplyCooldown(Handle, ActorInfo, ActivationInfo);
+    UE_LOG(LogTemp, Warning, TEXT("🚀 GA_PlaceTrap: Ability completed"));
     EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }
 

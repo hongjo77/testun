@@ -94,15 +94,11 @@ protected:
     void UseInventorySlot8();
     void UseInventorySlot9();
 
-    // ✅ 개선된 함수
+    // 핵심 함수
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     void UseInventorySlotByKey(int32 KeyNumber);
 
-    // 레거시 호환성 함수
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void UseInventorySlot(int32 SlotIndex);
-
-    // 인벤토리 화면 표시 (기존 기능 유지)
+    // 인벤토리 화면 표시
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     void DisplayInventoryOnClient();
 };

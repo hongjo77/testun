@@ -99,10 +99,13 @@ bool UCYWeaponComponent::ExecuteWeaponAttack()
         return false;
     }
 
-    // ✅ 하드코딩된 태그 사용
+    // ✅ 안전한 태그 초기화 (한 번만)
+    FCYGameplayTags::InitializeNativeTags();
+    
+    // ✅ 하드코딩된 태그 사용 (백업)
     FGameplayTag WeaponAttackTag = FGameplayTag::RequestGameplayTag(FName("Ability.Weapon.Attack"));
     
-    UE_LOG(LogTemp, Warning, TEXT("🗡️ Using hardcoded tag: %s"), *WeaponAttackTag.ToString());
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ Using tag: %s"), *WeaponAttackTag.ToString());
     
     // ✅ 태그가 유효한지 확인
     if (!WeaponAttackTag.IsValid())
@@ -111,31 +114,20 @@ bool UCYWeaponComponent::ExecuteWeaponAttack()
         return false;
     }
     
-    // ✅ 어빌리티 디버깅
     FGameplayTagContainer TagContainer;
     TagContainer.AddTag(WeaponAttackTag);
     
     TArray<FGameplayAbilitySpec*> ActivatableAbilities;
     ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(TagContainer, ActivatableAbilities);
     
-    UE_LOG(LogTemp, Warning, TEXT("🗡️ Found %d activatable abilities with Weapon Attack tag"), ActivatableAbilities.Num());
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ Found %d activatable abilities"), ActivatableAbilities.Num());
     
-    // ✅ 모든 어빌리티 검사
     TArray<FGameplayAbilitySpec> AllAbilities = ASC->GetActivatableAbilities();
     UE_LOG(LogTemp, Warning, TEXT("🗡️ Total abilities in ASC: %d"), AllAbilities.Num());
     
-    for (int32 i = 0; i < AllAbilities.Num(); ++i)
-    {
-        if (AllAbilities[i].Ability)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("  - Ability %d: %s"), i, 
-                   *AllAbilities[i].Ability->GetClass()->GetName());
-        }
-    }
-    
     bool bResult = ASC->TryActivateAbilityByTag(WeaponAttackTag);
-    
     UE_LOG(LogTemp, Warning, TEXT("🗡️ Weapon attack result: %s"), bResult ? TEXT("Success") : TEXT("Failed"));
+    
     return bResult;
 }
 

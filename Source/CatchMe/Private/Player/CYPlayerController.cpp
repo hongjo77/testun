@@ -1,3 +1,4 @@
+// CYPlayerController.cpp - UseInventorySlot 함수 제거 및 정리
 #include "Player/CYPlayerController.h"
 #include "Player/CYPlayerCharacter.h"
 #include "EnhancedInputComponent.h"
@@ -7,7 +8,7 @@
 #include "Components/CYWeaponComponent.h"
 #include "Items/CYItemBase.h"
 #include "Items/CYWeaponBase.h"
-#include "CYInventoryTypes.h" // ✅ 새로운 타입 시스템
+#include "CYInventoryTypes.h"
 
 ACYPlayerController::ACYPlayerController()
 {
@@ -19,7 +20,7 @@ void ACYPlayerController::BeginPlay()
     Super::BeginPlay();
 
     ULocalPlayer* LocalPlayer = GetLocalPlayer();
-    if (!LocalPlayer) return; // 데디케이티드 서버에서는 LocalPlayer 없음
+    if (!LocalPlayer) return;
 
     if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer))
     {
@@ -34,11 +35,41 @@ void ACYPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
 
+    // ✅ Enhanced Input 우선 시도
+    bool bUsingEnhancedInput = false;
+    
     if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent))
     {
-        // Enhanced Input 바인딩
+        UE_LOG(LogTemp, Warning, TEXT("✅ Using Enhanced Input"));
+        
+        // Enhanced Input으로만 바인딩
+        if (InteractAction)
+        {
+            EnhancedInput->BindAction(InteractAction, ETriggerEvent::Started, this, &ACYPlayerController::InteractPressed);
+            bUsingEnhancedInput = true;
+        }
         if (PrimaryAttackAction)
+        {
             EnhancedInput->BindAction(PrimaryAttackAction, ETriggerEvent::Started, this, &ACYPlayerController::PrimaryAttackPressed);
+            bUsingEnhancedInput = true;
+        }
+        if (UseItem4Action)
+        {
+            EnhancedInput->BindAction(UseItem4Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot4);
+            bUsingEnhancedInput = true;
+        }
+        if (UseItem5Action)
+        {
+            EnhancedInput->BindAction(UseItem5Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot5);
+            bUsingEnhancedInput = true;
+        }
+        if (UseItem6Action)
+        {
+            EnhancedInput->BindAction(UseItem6Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot6);
+            bUsingEnhancedInput = true;
+        }
+        
+        // 나머지 Enhanced Input 바인딩들
         if (MoveAction)
             EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACYPlayerController::Move);
         if (LookAction)
@@ -48,34 +79,18 @@ void ACYPlayerController::SetupInputComponent()
             EnhancedInput->BindAction(JumpAction, ETriggerEvent::Started, this, &ACYPlayerController::JumpPressed);
             EnhancedInput->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACYPlayerController::JumpReleased);
         }
-        if (InteractAction)
-            EnhancedInput->BindAction(InteractAction, ETriggerEvent::Started, this, &ACYPlayerController::InteractPressed);
-        
-        // 인벤토리 액션들
-        if (UseItem1Action) EnhancedInput->BindAction(UseItem1Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot1);
-        if (UseItem2Action) EnhancedInput->BindAction(UseItem2Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot2);
-        if (UseItem3Action) EnhancedInput->BindAction(UseItem3Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot3);
-        if (UseItem4Action) EnhancedInput->BindAction(UseItem4Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot4);
-        if (UseItem5Action) EnhancedInput->BindAction(UseItem5Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot5);
-        if (UseItem6Action) EnhancedInput->BindAction(UseItem6Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot6);
-        if (UseItem7Action) EnhancedInput->BindAction(UseItem7Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot7);
-        if (UseItem8Action) EnhancedInput->BindAction(UseItem8Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot8);
-        if (UseItem9Action) EnhancedInput->BindAction(UseItem9Action, ETriggerEvent::Started, this, &ACYPlayerController::UseInventorySlot9);
     }
-    else if (InputComponent)
+    
+    // ✅ Enhanced Input이 제대로 안 되면 Legacy Input 사용
+    if (!bUsingEnhancedInput && InputComponent)
     {
-        // 레거시 Input 백업
-        InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ACYPlayerController::PrimaryAttackPressed);
+        UE_LOG(LogTemp, Warning, TEXT("⚠️ Falling back to Legacy Input"));
+        
         InputComponent->BindKey(EKeys::E, IE_Pressed, this, &ACYPlayerController::InteractPressed);
-        InputComponent->BindKey(EKeys::One, IE_Pressed, this, &ACYPlayerController::UseInventorySlot1);
-        InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ACYPlayerController::UseInventorySlot2);
-        InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ACYPlayerController::UseInventorySlot3);
+        InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ACYPlayerController::PrimaryAttackPressed);
         InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &ACYPlayerController::UseInventorySlot4);
         InputComponent->BindKey(EKeys::Five, IE_Pressed, this, &ACYPlayerController::UseInventorySlot5);
         InputComponent->BindKey(EKeys::Six, IE_Pressed, this, &ACYPlayerController::UseInventorySlot6);
-        InputComponent->BindKey(EKeys::Seven, IE_Pressed, this, &ACYPlayerController::UseInventorySlot7);
-        InputComponent->BindKey(EKeys::Eight, IE_Pressed, this, &ACYPlayerController::UseInventorySlot8);
-        InputComponent->BindKey(EKeys::Nine, IE_Pressed, this, &ACYPlayerController::UseInventorySlot9);
     }
 }
 
@@ -121,16 +136,13 @@ void ACYPlayerController::InteractPressed()
 
 void ACYPlayerController::PrimaryAttackPressed()
 {
-    // 서버에 인벤토리 표시 요청
     ServerDisplayInventory();
 
-    // 클라이언트에서도 인벤토리 표시
     if (IsLocalController())
     {
         DisplayInventoryOnClient();
     }
 
-    // 무기 공격
     ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn());
     if (PlayerCharacter && PlayerCharacter->WeaponComponent && PlayerCharacter->WeaponComponent->CurrentWeapon)
     {
@@ -146,7 +158,7 @@ void ACYPlayerController::ServerAttackPressed_Implementation()
     }
 }
 
-// ============ 개선된 인벤토리 슬롯 시스템 ============
+// ============ 인벤토리 슬롯 함수들 ============
 
 void ACYPlayerController::UseInventorySlot1() { UseInventorySlotByKey(1); }
 void ACYPlayerController::UseInventorySlot2() { UseInventorySlotByKey(2); }
@@ -164,7 +176,6 @@ void ACYPlayerController::UseInventorySlotByKey(int32 KeyNumber)
     {
         if (!PlayerCharacter->InventoryComponent) return;
 
-        // ✅ 개선된 시스템: 하드코딩 대신 타입 안전한 변환
         int32 SlotIndex = UInventorySlotUtils::KeyToSlotIndex(KeyNumber);
         if (SlotIndex >= 0)
         {
@@ -173,15 +184,7 @@ void ACYPlayerController::UseInventorySlotByKey(int32 KeyNumber)
     }
 }
 
-void ACYPlayerController::UseInventorySlot(int32 SlotIndex)
-{
-    if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
-    {
-        PlayerCharacter->UseInventorySlot(SlotIndex);
-    }
-}
-
-// ============ 인벤토리 화면 표시 (기존 기능 유지) ============
+// ============ 인벤토리 화면 표시 ============
 
 void ACYPlayerController::DisplayInventoryOnClient()
 {
@@ -191,10 +194,7 @@ void ACYPlayerController::DisplayInventoryOnClient()
     UCYInventoryComponent* InventoryComp = PlayerCharacter->InventoryComponent;
     UCYWeaponComponent* WeaponComp = PlayerCharacter->WeaponComponent;
 
-    // 기존 메시지 제거
     GEngine->ClearOnScreenDebugMessages();
-
-    // 인벤토리 상태 표시
     GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow, TEXT("=== 📦 INVENTORY STATUS ==="));
     
     // 무기 슬롯 (1~3번 키)
@@ -262,7 +262,6 @@ void ACYPlayerController::ServerDisplayInventory_Implementation()
 
     UE_LOG(LogTemp, Warning, TEXT("=== 📦 SERVER INVENTORY STATUS ==="));
     
-    // 무기 슬롯
     UE_LOG(LogTemp, Warning, TEXT("🗡️ WEAPONS (Keys 1-3):"));
     for (int32 i = 0; i < InventoryComp->WeaponSlots.Num(); ++i)
     {
@@ -287,7 +286,6 @@ void ACYPlayerController::ServerDisplayInventory_Implementation()
         }
     }
     
-    // 아이템 슬롯
     UE_LOG(LogTemp, Warning, TEXT("🎒 ITEMS (Keys 4-9):"));
     int32 MaxDisplayItems = FMath::Min(6, InventoryComp->ItemSlots.Num());
     for (int32 i = 0; i < MaxDisplayItems; ++i)
