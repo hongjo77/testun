@@ -4,6 +4,8 @@
 #include "Items/CYItemBase.h"
 #include "Items/CYWeaponBase.h"
 #include "Engine/World.h"
+#include "Items/CYTrapBase.h"
+#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Net/UnrealNetwork.h"
 #include "Player/CYPlayerCharacter.h"
@@ -49,6 +51,24 @@ void UCYItemInteractionComponent::InteractWithNearbyItem()
     else
     {
         UE_LOG(LogTemp, Error, TEXT("❌ No nearby item to interact with!"));
+        
+        // ✅ 수동으로 근처 아이템 찾기 (디버깅용)
+        TArray<AActor*> FoundActors;
+        UGameplayStatics::GetAllActorsOfClass(GetWorld(), ACYItemBase::StaticClass(), FoundActors);
+        
+        FVector PlayerLocation = GetOwner()->GetActorLocation();
+        for (AActor* Actor : FoundActors)
+        {
+            if (ACYItemBase* Item = Cast<ACYItemBase>(Actor))
+            {
+                float Distance = FVector::Dist(PlayerLocation, Item->GetActorLocation());
+                if (Distance < InteractionRange && !Item->bIsPickedUp)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("🔧 Manual found nearby item: %s at distance %f"), 
+                           *Item->GetName(), Distance);
+                }
+            }
+        }
     }
 }
 
@@ -115,15 +135,39 @@ void UCYItemInteractionComponent::CheckForNearbyItems()
     ACYItemBase* ClosestItem = nullptr;
     float ClosestDistance = FLT_MAX;
 
+    UE_LOG(LogTemp, VeryVerbose, TEXT("🔍 CheckForNearbyItems: Found %d actors"), OutActors.Num());
+
     if (bHit)
     {
         for (AActor* Actor : OutActors)
         {
             if (ACYItemBase* Item = Cast<ACYItemBase>(Actor))
             {
-                if (Item->bIsPickedUp) continue;
+                UE_LOG(LogTemp, VeryVerbose, TEXT("🔍 Checking item: %s (PickedUp: %s)"), 
+                       *Item->GetName(), Item->bIsPickedUp ? TEXT("true") : TEXT("false"));
+                
+                if (Item->bIsPickedUp) 
+                {
+                    continue;
+                }
+                
+                // ✅ 트랩의 경우 추가 체크
+                if (ACYTrapBase* Trap = Cast<ACYTrapBase>(Item))
+                {
+                    UE_LOG(LogTemp, VeryVerbose, TEXT("🔍 Trap state: %s"), 
+                           Trap->TrapState == ETrapState::MapPlaced ? TEXT("MapPlaced") : TEXT("PlayerPlaced"));
+                    
+                    // 플레이어가 설치한 트랩은 픽업 불가
+                    if (Trap->TrapState != ETrapState::MapPlaced)
+                    {
+                        UE_LOG(LogTemp, VeryVerbose, TEXT("🔍 Trap not pickupable (PlayerPlaced)"));
+                        continue;
+                    }
+                }
                 
                 float Distance = FVector::Dist(StartLocation, Item->GetActorLocation());
+                UE_LOG(LogTemp, VeryVerbose, TEXT("🔍 Item %s at distance %f"), *Item->GetName(), Distance);
+                
                 if (Distance < ClosestDistance)
                 {
                     ClosestDistance = Distance;
@@ -135,6 +179,10 @@ void UCYItemInteractionComponent::CheckForNearbyItems()
 
     if (NearbyItem != ClosestItem)
     {
+        UE_LOG(LogTemp, Warning, TEXT("🔍 Nearby item changed: %s -> %s"), 
+               NearbyItem ? *NearbyItem->GetName() : TEXT("NULL"),
+               ClosestItem ? *ClosestItem->GetName() : TEXT("NULL"));
+               
         NearbyItem = ClosestItem;
         OnRep_NearbyItem();
     }

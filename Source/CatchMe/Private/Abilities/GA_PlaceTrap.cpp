@@ -13,16 +13,21 @@ UGA_PlaceTrap::UGA_PlaceTrap()
     InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
     NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
-    const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
+    // ✅ 하드코딩된 태그 사용
+    FGameplayTag PlaceTrapTag = FGameplayTag::RequestGameplayTag(FName("Ability.Trap.Place"));
+    FGameplayTag StunnedTag = FGameplayTag::RequestGameplayTag(FName("State.Stunned"));
+    FGameplayTag DeadTag = FGameplayTag::RequestGameplayTag(FName("State.Dead"));
     
     FGameplayTagContainer AssetTags;
-    AssetTags.AddTag(GameplayTags.Ability_Trap_Place);
+    AssetTags.AddTag(PlaceTrapTag);
     SetAssetTags(AssetTags);
     
     FGameplayTagContainer BlockedTags;
-    BlockedTags.AddTag(GameplayTags.State_Stunned);
-    BlockedTags.AddTag(GameplayTags.State_Dead);
+    BlockedTags.AddTag(StunnedTag);
+    BlockedTags.AddTag(DeadTag);
     ActivationBlockedTags = BlockedTags;
+    
+    UE_LOG(LogTemp, Warning, TEXT("✅ GA_PlaceTrap created with tag: %s"), *PlaceTrapTag.ToString());
 }
 
 void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,

@@ -11,20 +11,26 @@ UGA_WeaponAttack::UGA_WeaponAttack()
     InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
     NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
-    const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
-
+    // ✅ 하드코딩된 태그 사용 (초기화 순서 문제 해결)
+    FGameplayTag WeaponAttackTag = FGameplayTag::RequestGameplayTag(FName("Ability.Weapon.Attack"));
+    FGameplayTag AttackingTag = FGameplayTag::RequestGameplayTag(FName("State.Attacking"));
+    FGameplayTag StunnedTag = FGameplayTag::RequestGameplayTag(FName("State.Stunned"));
+    FGameplayTag DeadTag = FGameplayTag::RequestGameplayTag(FName("State.Dead"));
+    
     FGameplayTagContainer AssetTags;
-    AssetTags.AddTag(GameplayTags.Ability_Weapon_Attack);
+    AssetTags.AddTag(WeaponAttackTag);
     SetAssetTags(AssetTags);
     
     FGameplayTagContainer OwnedTags;
-    OwnedTags.AddTag(GameplayTags.State_Attacking);
+    OwnedTags.AddTag(AttackingTag);
     ActivationOwnedTags = OwnedTags;
     
     FGameplayTagContainer BlockedTags;
-    BlockedTags.AddTag(GameplayTags.State_Stunned);
-    BlockedTags.AddTag(GameplayTags.State_Dead);
+    BlockedTags.AddTag(StunnedTag);
+    BlockedTags.AddTag(DeadTag);
     ActivationBlockedTags = BlockedTags;
+    
+    UE_LOG(LogTemp, Warning, TEXT("✅ GA_WeaponAttack created with tag: %s"), *WeaponAttackTag.ToString());
 }
 
 void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,

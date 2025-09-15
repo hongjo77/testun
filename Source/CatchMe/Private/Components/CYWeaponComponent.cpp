@@ -99,31 +99,43 @@ bool UCYWeaponComponent::ExecuteWeaponAttack()
         return false;
     }
 
-    const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
-    UE_LOG(LogTemp, Warning, TEXT("🗡️ ExecuteWeaponAttack: Trying to activate ability with tag: %s"), 
-           *GameplayTags.Ability_Weapon_Attack.ToString());
+    // ✅ 하드코딩된 태그 사용
+    FGameplayTag WeaponAttackTag = FGameplayTag::RequestGameplayTag(FName("Ability.Weapon.Attack"));
     
-    // ✅ 디버깅: 어빌리티가 존재하는지 확인
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ Using hardcoded tag: %s"), *WeaponAttackTag.ToString());
+    
+    // ✅ 태그가 유효한지 확인
+    if (!WeaponAttackTag.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ Weapon attack tag is invalid!"));
+        return false;
+    }
+    
+    // ✅ 어빌리티 디버깅
     FGameplayTagContainer TagContainer;
-    TagContainer.AddTag(GameplayTags.Ability_Weapon_Attack);
+    TagContainer.AddTag(WeaponAttackTag);
     
     TArray<FGameplayAbilitySpec*> ActivatableAbilities;
     ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(TagContainer, ActivatableAbilities);
     
     UE_LOG(LogTemp, Warning, TEXT("🗡️ Found %d activatable abilities with Weapon Attack tag"), ActivatableAbilities.Num());
     
-    for (int32 i = 0; i < ActivatableAbilities.Num(); ++i)
+    // ✅ 모든 어빌리티 검사
+    TArray<FGameplayAbilitySpec> AllAbilities = ASC->GetActivatableAbilities();
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ Total abilities in ASC: %d"), AllAbilities.Num());
+    
+    for (int32 i = 0; i < AllAbilities.Num(); ++i)
     {
-        if (ActivatableAbilities[i] && ActivatableAbilities[i]->Ability)
+        if (AllAbilities[i].Ability)
         {
             UE_LOG(LogTemp, Warning, TEXT("  - Ability %d: %s"), i, 
-                   *ActivatableAbilities[i]->Ability->GetClass()->GetName());
+                   *AllAbilities[i].Ability->GetClass()->GetName());
         }
     }
     
-    bool bResult = ASC->TryActivateAbilityByTag(GameplayTags.Ability_Weapon_Attack);
+    bool bResult = ASC->TryActivateAbilityByTag(WeaponAttackTag);
     
-    UE_LOG(LogTemp, Log, TEXT("Weapon attack: %s"), bResult ? TEXT("Success") : TEXT("Failed"));
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ Weapon attack result: %s"), bResult ? TEXT("Success") : TEXT("Failed"));
     return bResult;
 }
 

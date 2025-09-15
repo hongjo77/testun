@@ -10,7 +10,4 @@ DECLARE_LOG_CATEGORY_EXTERN(LogCatchMe, Log, All);
 
 class FCatchMeModule : public IModuleInterface
 {
-public:
-	virtual void StartupModule() override;
-	virtual void ShutdownModule() override;
 };

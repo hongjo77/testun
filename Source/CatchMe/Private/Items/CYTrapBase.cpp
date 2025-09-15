@@ -55,11 +55,11 @@ void ACYTrapBase::BeginPlay()
 {
     Super::BeginPlay();
 
+    // ✅ 서버와 클라이언트 모두에서 상태별 트랩 설정
+    SetupTrapForCurrentState();
+    
     if (HasAuthority())
     {
-        // ✅ 상태별 트랩 설정
-        SetupTrapForCurrentState();
-        
         // 트랩 스폰 이벤트
         OnTrapSpawned();
         
@@ -67,10 +67,10 @@ void ACYTrapBase::BeginPlay()
         SetupTrapVisuals();
     }
 
-    UE_LOG(LogTemp, Log, TEXT("🎯 Trap spawned: %s (Type: %d, State: %s)"), 
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Trap BeginPlay: %s (State: %s, Authority: %s)"), 
            *ItemName.ToString(), 
-           static_cast<int32>(TrapType),
-           TrapState == ETrapState::MapPlaced ? TEXT("MapPlaced") : TEXT("PlayerPlaced"));
+           TrapState == ETrapState::MapPlaced ? TEXT("MapPlaced") : TEXT("PlayerPlaced"),
+           HasAuthority() ? TEXT("Server") : TEXT("Client"));
 }
 
 void ACYTrapBase::SetupTrapForCurrentState()
@@ -79,13 +79,13 @@ void ACYTrapBase::SetupTrapForCurrentState()
 
     if (TrapState == ETrapState::MapPlaced)
     {
-        // ✅ 맵 배치 상태: 픽업 가능 (래퍼 함수 사용)
+        // ✅ 맵 배치 상태: 픽업 가능
         InteractionSphere->SetSphereRadius(150.0f); // 픽업 범위
         InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
         InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
         InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
         
-        // ✅ 래퍼 함수를 통한 바인딩
+        // ✅ 기존 바인딩 클리어 후 새로 바인딩
         InteractionSphere->OnComponentBeginOverlap.Clear();
         InteractionSphere->OnComponentEndOverlap.Clear();
         InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnPickupSphereOverlap);
@@ -95,8 +95,11 @@ void ACYTrapBase::SetupTrapForCurrentState()
     }
     else if (TrapState == ETrapState::PlayerPlaced)
     {
-        // ✅ 플레이어 배치 상태: 트리거 모드 (타이머 후 활성화)
-        SetupTrapTimers(); // 플레이어가 설치한 경우에만 타이머 시작
+        // ✅ 플레이어 배치 상태: 트리거 모드
+        if (HasAuthority())
+        {
+            SetupTrapTimers(); // 서버에서만 타이머 시작
+        }
         
         UE_LOG(LogTemp, Warning, TEXT("🎯 Trap set as ACTIVE: %s"), *ItemName.ToString());
     }

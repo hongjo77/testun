@@ -170,12 +170,23 @@ void ACYPlayerCharacter::GrantDefaultAbilities()
 {
     if (!AbilitySystemComponent || !HasAuthority()) return;
 
-    for (TSubclassOf<UGameplayAbility>& AbilityClass : DefaultAbilities)
+    UE_LOG(LogTemp, Warning, TEXT("🎯 GrantDefaultAbilities: %d abilities to grant"), DefaultAbilities.Num());
+
+    for (int32 i = 0; i < DefaultAbilities.Num(); ++i)
     {
+        TSubclassOf<UGameplayAbility>& AbilityClass = DefaultAbilities[i];
         if (AbilityClass)
         {
             FGameplayAbilitySpec AbilitySpec(AbilityClass, 1, INDEX_NONE, this);
-            AbilitySystemComponent->GiveAbility(AbilitySpec);
+            FGameplayAbilitySpecHandle Handle = AbilitySystemComponent->GiveAbility(AbilitySpec);
+            
+            UE_LOG(LogTemp, Warning, TEXT("✅ Granted ability: %s (Handle valid: %s)"), 
+                   *AbilityClass->GetName(),
+                   Handle.IsValid() ? TEXT("true") : TEXT("false"));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Error, TEXT("❌ DefaultAbilities[%d] is null!"), i);
         }
     }
 }
