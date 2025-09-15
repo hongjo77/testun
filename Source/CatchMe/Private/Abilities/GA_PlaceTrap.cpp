@@ -65,8 +65,8 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     
     if (ACYTrapBase* Trap = GetWorld()->SpawnActor<ACYTrapBase>(TrapClass, SpawnLocation, SpawnRotation, SpawnParams))
     {
-        // ✅ 트랩 생성 후 즉시 커스텀 효과 설정
-        ConfigureTrapEffects(Trap);
+        // ✅ 트랩 생성 후 즉시 커스텀 효과 설정 (TriggerEventData 전달)
+        ConfigureTrapEffects(Trap, TriggerEventData);
         UE_LOG(LogTemp, Log, TEXT("Trap placed with %d effects"), Trap->ItemEffects.Num());
     }
 
@@ -90,7 +90,7 @@ FVector UGA_PlaceTrap::CalculateSpawnLocation(AActor* OwnerActor)
     return ForwardLocation;
 }
 
-void UGA_PlaceTrap::ConfigureTrapEffects(ACYTrapBase* Trap)
+void UGA_PlaceTrap::ConfigureTrapEffects(ACYTrapBase* Trap, const FGameplayEventData* TriggerEventData)
 {
     if (!Trap) return;
 
@@ -100,7 +100,38 @@ void UGA_PlaceTrap::ConfigureTrapEffects(ACYTrapBase* Trap)
     Trap->ItemEffects.Empty();
     Trap->ItemEffects.Add(UGE_ImmobilizeTrap::StaticClass());
 
-    // ✅ CurrentSpec의 SourceObject에서 아이템 정보 가져오기
+    // ✅ 방법 1: GameplayEventData에서 아이템 정보 가져오기 (우선)
+    if (TriggerEventData && TriggerEventData->OptionalObject)
+    {
+        const UObject* OptionalObj = TriggerEventData->OptionalObject;
+        if (OptionalObj)
+        {
+            if (const ACYItemBase* UsedItem = Cast<ACYItemBase>(OptionalObj))
+            {
+                UE_LOG(LogTemp, Warning, TEXT("✅ Found item from EventData: %s with %d DesiredTrapEffects"), 
+                       *UsedItem->ItemName.ToString(), UsedItem->DesiredTrapEffects.Num());
+                
+                if (UsedItem->DesiredTrapEffects.Num() > 0)
+                {
+                    Trap->ItemEffects = UsedItem->DesiredTrapEffects;
+                    UE_LOG(LogTemp, Warning, TEXT("🎯 Trap configured with %d CUSTOM effects from EventData"), 
+                           UsedItem->DesiredTrapEffects.Num());
+                    
+                    // 각 효과 클래스 이름 로그
+                    for (int32 i = 0; i < UsedItem->DesiredTrapEffects.Num(); i++)
+                    {
+                        if (UsedItem->DesiredTrapEffects[i])
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("  🔥 Effect[%d]: %s"), i, *UsedItem->DesiredTrapEffects[i]->GetName());
+                        }
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    // ✅ 방법 2: CurrentSpec의 SourceObject에서 아이템 정보 가져오기 (백업)
     const FGameplayAbilitySpec* CurrentSpec = GetCurrentAbilitySpec();
     if (CurrentSpec && CurrentSpec->SourceObject.IsValid())
     {

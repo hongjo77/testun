@@ -27,8 +27,8 @@ protected:
 	// 트랩 배치 위치 계산
 	FVector CalculateSpawnLocation(AActor* OwnerActor);
 
-	// 트랩 효과 설정
-	void ConfigureTrapEffects(ACYTrapBase* Trap);
+	// 트랩 효과 설정 (Event + SourceObject 이중 보장)
+	void ConfigureTrapEffects(ACYTrapBase* Trap, const FGameplayEventData* TriggerEventData);
 
 	// 쿨다운 적용
 	void ApplyCooldown(const FGameplayAbilitySpecHandle Handle, 

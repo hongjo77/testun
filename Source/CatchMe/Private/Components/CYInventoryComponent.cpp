@@ -8,7 +8,6 @@
 #include "Net/UnrealNetwork.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
-#include "AbilitySystemBlueprintLibrary.h"
 
 UCYInventoryComponent::UCYInventoryComponent()
 {
@@ -214,53 +213,35 @@ bool UCYInventoryComponent::EquipWeaponFromSlot(ACYItemBase* Item)
 bool UCYInventoryComponent::ActivateItemAbility(ACYItemBase* Item, int32 SlotIndex)
 {
     UAbilitySystemComponent* ASC = GetOwnerASC();
-    if (!ASC || !Item->ItemAbility) return false;
+    if (!ASC || !Item->ItemAbility) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ ASC or ItemAbility is null"));
+        return false;
+    }
 
     FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Item->ItemAbility);
-    if (!Spec) return false;
+    if (!Spec) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ AbilitySpec not found for %s"), *Item->ItemAbility->GetName());
+        return false;
+    }
 
-    // ✅ 안전한 방식으로 트랩 효과 정보 전달
-    if (Item->DesiredTrapEffects.Num() > 0)
+    // ✅ 완전히 단순한 방식: SourceObject만 설정
+    Spec->SourceObject = Item;
+    
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Trying to activate ability for item: %s"), *Item->ItemName.ToString());
+    
+    bool bSuccess = ASC->TryActivateAbility(Spec->Handle);
+    
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Item ability activation result: %s, Success=%s"), 
+           *Item->ItemName.ToString(), bSuccess ? TEXT("true") : TEXT("false"));
+    
+    if (bSuccess)
     {
-        // GameplayEventData를 통해 정보 전달
-        FGameplayEventData EventData;
-        EventData.Instigator = GetOwner();
-        EventData.Target = GetOwner();
-        EventData.OptionalObject = Item; // 직접 설정
-        EventData.EventTag = FGameplayTag::RequestGameplayTag("Event.Item.Use");
-        
-        // 이벤트 기반 어빌리티 활성화
-        bool bSuccess = ASC->TriggerAbilityFromGameplayEvent(
-            Spec->Handle,
-            ASC->AbilityActorInfo.Get(),
-            FGameplayTag::RequestGameplayTag("Event.Item.Use"),
-            &EventData,
-            *ASC
-        );
-        
-        UE_LOG(LogTemp, Warning, TEXT("🎯 Item ability activated via event: %s, Success=%s"), 
-               *Item->ItemName.ToString(), bSuccess ? TEXT("true") : TEXT("false"));
-        
-        if (bSuccess)
-        {
-            ProcessItemConsumption(Item, SlotIndex);
-        }
-        
-        return bSuccess;
+        ProcessItemConsumption(Item, SlotIndex);
     }
-    else
-    {
-        // 기존 방식 (SourceObject 설정)
-        Spec->SourceObject = Item;
-        bool bSuccess = ASC->TryActivateAbility(Spec->Handle);
-        
-        if (bSuccess)
-        {
-            ProcessItemConsumption(Item, SlotIndex);
-        }
-        
-        return bSuccess;
-    }
+    
+    return bSuccess;
 }
 
 void UCYInventoryComponent::ProcessItemConsumption(ACYItemBase* Item, int32 SlotIndex)
