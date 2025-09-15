@@ -44,7 +44,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
 	bool PerformLineTrace(FHitResult& OutHit, float Range = 1000.0f);
 
-	// ✅ 클라이언트 RPC로 인벤토리 상태 표시
+	// 클라이언트 RPC로 인벤토리 상태 표시
 	UFUNCTION(Client, Reliable, Category = "Weapon")
 	void ClientDisplayInventoryStatus();
 
@@ -53,6 +53,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_CurrentWeapon();
+
+	// 핵심 로직 분리
+	bool ExecuteWeaponAttack();
 
 	// 헬퍼 함수들
 	UCYAbilitySystemComponent* GetOwnerAbilitySystemComponent() const;

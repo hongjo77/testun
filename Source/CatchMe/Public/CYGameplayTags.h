@@ -31,6 +31,9 @@ struct CATCHME_API FCYGameplayTags
 	FGameplayTag Cooldown_Weapon_Attack;
 	FGameplayTag Cooldown_Trap_Place;
 
+	// ============ 이벤트 태그 ============
+	FGameplayTag Event_Item_Use;
+
 	// ============ 데이터 태그 ============
 	FGameplayTag Data_Damage;
 

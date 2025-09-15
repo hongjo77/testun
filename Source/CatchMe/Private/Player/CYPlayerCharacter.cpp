@@ -132,7 +132,7 @@ void ACYPlayerCharacter::InteractPressed()
 
 void ACYPlayerCharacter::AttackPressed()
 {
-    // ✅ 핵심 로직만 유지 - 과도한 로그 제거
+    // WeaponComponent에서 알아서 서버/클라이언트 분기 처리
     if (WeaponComponent)
     {
         WeaponComponent->PerformAttack();

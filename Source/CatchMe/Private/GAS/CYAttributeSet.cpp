@@ -45,66 +45,80 @@ void UCYAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
     // 체력 변화 처리
     if (Data.EvaluatedData.Attribute == GetHealthAttribute())
     {
-        float NewHealth = GetHealth();
-        SetHealth(FMath::Clamp(NewHealth, 0.0f, GetMaxHealth()));
+        HandleHealthChange();
+    }
+    // 이동속도 변화 처리
+    else if (Data.EvaluatedData.Attribute == GetMoveSpeedAttribute())
+    {
+        HandleMoveSpeedChange();
+    }
+}
 
-        if (GetHealth() <= 0.0f)
+void UCYAttributeSet::HandleHealthChange()
+{
+    float NewHealth = GetHealth();
+    SetHealth(FMath::Clamp(NewHealth, 0.0f, GetMaxHealth()));
+
+    if (GetHealth() <= 0.0f)
+    {
+        if (AActor* Owner = GetOwningActor())
         {
-            if (AActor* Owner = GetOwningActor())
+            UE_LOG(LogTemp, Warning, TEXT("%s has died"), *Owner->GetName());
+        }
+    }
+}
+
+void UCYAttributeSet::HandleMoveSpeedChange()
+{
+    float NewMoveSpeed = GetMoveSpeed();
+    
+    if (ACharacter* Character = Cast<ACharacter>(GetOwningActor()))
+    {
+        if (UCharacterMovementComponent* MovementComp = Character->GetCharacterMovement())
+        {
+            ApplyMovementRestrictions(MovementComp, NewMoveSpeed);
+            
+            if (Character->HasAuthority())
             {
-                UE_LOG(LogTemp, Warning, TEXT("%s has died"), *Owner->GetName());
+                Character->ForceNetUpdate();
             }
         }
     }
+}
 
-    // 이동속도 변화 처리
-    if (Data.EvaluatedData.Attribute == GetMoveSpeedAttribute())
+void UCYAttributeSet::ApplyMovementRestrictions(UCharacterMovementComponent* MovementComp, float Speed)
+{
+    MovementComp->MaxWalkSpeed = Speed;
+    
+    if (Speed <= 0.0f)
     {
-        float NewMoveSpeed = GetMoveSpeed();
+        // 완전 정지
+        MovementComp->StopMovementImmediately();
+        MovementComp->MaxAcceleration = 0.0f;
+        MovementComp->BrakingDecelerationWalking = 10000.0f;
+        MovementComp->GroundFriction = 100.0f;
+        MovementComp->JumpZVelocity = 0.0f;
         
-        if (ACharacter* Character = Cast<ACharacter>(GetOwningActor()))
-        {
-            if (UCharacterMovementComponent* MovementComp = Character->GetCharacterMovement())
-            {
-                MovementComp->MaxWalkSpeed = NewMoveSpeed;
-                
-                if (NewMoveSpeed <= 0.0f)
-                {
-                    // 완전 정지
-                    MovementComp->StopMovementImmediately();
-                    MovementComp->MaxAcceleration = 0.0f;
-                    MovementComp->BrakingDecelerationWalking = 10000.0f;
-                    MovementComp->GroundFriction = 100.0f;
-                    MovementComp->JumpZVelocity = 0.0f;
-                    
-                    UE_LOG(LogTemp, Warning, TEXT("IMMOBILIZED: %s"), *Character->GetName());
-                }
-                else if (NewMoveSpeed < 200.0f)
-                {
-                    MovementComp->MaxAcceleration = 500.0f;
-                    MovementComp->BrakingDecelerationWalking = 1000.0f;
-                    MovementComp->JumpZVelocity = 0.0f;
-                    
-                    UE_LOG(LogTemp, Warning, TEXT("SLOWED: %s to %f"), *Character->GetName(), NewMoveSpeed);
-                }
-                else
-                {
-                    // 정상 복구
-                    MovementComp->MaxAcceleration = 2048.0f;
-                    MovementComp->BrakingDecelerationWalking = 2000.0f;
-                    MovementComp->GroundFriction = 8.0f;
-                    MovementComp->JumpZVelocity = 600.0f;
-                    
-                    UE_LOG(LogTemp, Warning, TEXT("MOVEMENT RESTORED: %s"), *Character->GetName());
-                }
-                
-                // 네트워크 동기화
-                if (Character->HasAuthority())
-                {
-                    Character->ForceNetUpdate();
-                }
-            }
-        }
+        UE_LOG(LogTemp, Warning, TEXT("IMMOBILIZED: %s"), *GetOwningActor()->GetName());
+    }
+    else if (Speed < 200.0f)
+    {
+        // 느림 상태
+        MovementComp->MaxAcceleration = 500.0f;
+        MovementComp->BrakingDecelerationWalking = 1000.0f;
+        MovementComp->JumpZVelocity = 0.0f;
+        
+        UE_LOG(LogTemp, Warning, TEXT("SLOWED: %s to %f"), *GetOwningActor()->GetName(), Speed);
+    }
+    else
+    {
+        // 정상 복구
+        MovementComp->MaxAcceleration = 2048.0f;
+        MovementComp->BrakingDecelerationWalking = 2000.0f;
+        MovementComp->GroundFriction = 8.0f;
+        MovementComp->JumpZVelocity = 600.0f;
+        
+        UE_LOG(LogTemp, Warning, TEXT("MOVEMENT RESTORED: %s"), *GetOwningActor()->GetName());
     }
 }
 
@@ -125,42 +139,12 @@ void UCYAttributeSet::OnRep_MoveSpeed(const FGameplayAttributeData& OldMoveSpeed
     UE_LOG(LogTemp, Warning, TEXT("OnRep_MoveSpeed: %f -> %f"), 
            OldMoveSpeed.GetCurrentValue(), GetMoveSpeed());
     
-    // ✅ 클라이언트에서도 동일한 점프 제한 적용
+    // 클라이언트에서도 동일한 제한 적용
     if (ACharacter* Character = Cast<ACharacter>(GetOwningActor()))
     {
         if (UCharacterMovementComponent* MovementComp = Character->GetCharacterMovement())
         {
-            MovementComp->MaxWalkSpeed = GetMoveSpeed();
-            
-            if (GetMoveSpeed() <= 0.0f)
-            {
-                MovementComp->StopMovementImmediately();
-                MovementComp->MaxAcceleration = 0.0f;
-                MovementComp->BrakingDecelerationWalking = 10000.0f;
-                MovementComp->GroundFriction = 100.0f;
-                
-                // 클라이언트에서도 점프 차단
-                MovementComp->JumpZVelocity = 0.0f;
-                
-                UE_LOG(LogTemp, Warning, TEXT("CLIENT: %s immobilized (Jump blocked)"), *Character->GetName());
-            }
-            else if (GetMoveSpeed() < 200.0f)
-            {
-                MovementComp->MaxAcceleration = 500.0f;
-                MovementComp->BrakingDecelerationWalking = 1000.0f;
-                MovementComp->JumpZVelocity = 0.0f;
-            }
-            else
-            {
-                MovementComp->MaxAcceleration = 2048.0f;
-                MovementComp->BrakingDecelerationWalking = 2000.0f;
-                MovementComp->GroundFriction = 8.0f;
-                
-                // 클라이언트에서도 점프 복구
-                MovementComp->JumpZVelocity = 600.0f;
-                
-                UE_LOG(LogTemp, Warning, TEXT("CLIENT: %s mobility restored (Jump enabled)"), *Character->GetName());
-            }
+            ApplyMovementRestrictions(MovementComp, GetMoveSpeed());
         }
     }
 }

@@ -5,6 +5,7 @@
 #include "GA_PlaceTrap.generated.h"
 
 class ACYTrapBase;
+struct FGameplayEventData;
 
 UCLASS()
 class CATCHME_API UGA_PlaceTrap : public UGameplayAbility

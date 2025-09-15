@@ -57,32 +57,33 @@ bool UCYWeaponComponent::UnequipWeapon()
 
 bool UCYWeaponComponent::PerformAttack()
 {
-    // ✅ 핵심 로직만 유지 - 과도한 로그 제거
-    if (!CurrentWeapon) 
+    // 서버에서만 실행
+    if (!GetOwner()->HasAuthority()) return false;
+
+    // 무기가 있으면 공격, 없으면 인벤토리 표시
+    if (CurrentWeapon) 
     {
-        UE_LOG(LogTemp, Warning, TEXT("No weapon equipped"));
-        return false;
+        return ExecuteWeaponAttack();
     }
+    else
+    {
+        // 클라이언트에 인벤토리 표시 요청
+        ClientDisplayInventoryStatus();
+        return true;
+    }
+}
+
+bool UCYWeaponComponent::ExecuteWeaponAttack()
+{
+    if (!CurrentWeapon) return false;
 
     UCYAbilitySystemComponent* ASC = GetOwnerAbilitySystemComponent();
-    if (!ASC) 
-    {
-        UE_LOG(LogTemp, Warning, TEXT("No AbilitySystemComponent found"));
-        return false;
-    }
+    if (!ASC) return false;
 
     const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
     bool bResult = ASC->TryActivateAbilityByTag(GameplayTags.Ability_Weapon_Attack);
     
-    if (bResult)
-    {
-        UE_LOG(LogTemp, Log, TEXT("Weapon attack activated"));
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Failed to activate weapon attack"));
-    }
-
+    UE_LOG(LogTemp, Log, TEXT("Weapon attack: %s"), bResult ? TEXT("Success") : TEXT("Failed"));
     return bResult;
 }
 
@@ -161,23 +162,19 @@ void UCYWeaponComponent::DisableWeaponInteraction(ACYWeaponBase* Weapon)
 
 void UCYWeaponComponent::ClientDisplayInventoryStatus_Implementation()
 {
-    UE_LOG(LogTemp, Warning, TEXT("📦 ClientDisplayInventoryStatus_Implementation called"));
-    
-    if (!GEngine) 
-    {
-        UE_LOG(LogTemp, Error, TEXT("GEngine is null"));
-        return;
-    }
+    if (!GEngine) return;
 
     UCYInventoryComponent* InventoryComp = GetOwner()->FindComponentByClass<UCYInventoryComponent>();
     if (!InventoryComp)
     {
-        GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Red, TEXT("❌ No InventoryComponent found"));
-        UE_LOG(LogTemp, Error, TEXT("InventoryComponent not found"));
+        GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, TEXT("❌ No InventoryComponent found"));
         return;
     }
 
-    // 화면에 인벤토리 상태 표시
+    // 기존 메시지 제거
+    GEngine->ClearOnScreenDebugMessages();
+
+    // 인벤토리 상태 표시
     GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow, TEXT("=== 📦 INVENTORY STATUS ==="));
     
     // 무기 슬롯 (1~3번 키)
@@ -193,7 +190,6 @@ void UCYWeaponComponent::ClientDisplayInventoryStatus_Implementation()
                 InventoryComp->WeaponSlots[i]->ItemCount
             );
             
-            // 현재 장착된 무기 표시
             if (CurrentWeapon == InventoryComp->WeaponSlots[i])
             {
                 WeaponInfo += TEXT(" ⭐ EQUIPPED");
@@ -211,7 +207,7 @@ void UCYWeaponComponent::ClientDisplayInventoryStatus_Implementation()
         }
     }
     
-    // 아이템 슬롯 (4~9번 키, 처음 6개만)
+    // 아이템 슬롯 (4~9번 키)
     GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Cyan, TEXT("🎒 ITEMS (Keys 4-9):"));
     int32 MaxDisplayItems = FMath::Min(6, InventoryComp->ItemSlots.Num());
     for (int32 i = 0; i < MaxDisplayItems; ++i)

@@ -66,6 +66,12 @@ void FCYGameplayTags::InitializeNativeTags()
         FString("트랩 설치 쿨다운")
     );
 
+    // ============ 이벤트 태그 등록 ============
+    GameplayTags.Event_Item_Use = Manager.AddNativeGameplayTag(
+        FName("Event.Item.Use"),
+        FString("아이템 사용 이벤트")
+    );
+
     // ============ 데이터 태그 등록 ============
     GameplayTags.Data_Damage = Manager.AddNativeGameplayTag(
         FName("Data.Damage"),

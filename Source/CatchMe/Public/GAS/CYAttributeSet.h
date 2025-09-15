@@ -5,6 +5,8 @@
 #include "AbilitySystemComponent.h"
 #include "CYAttributeSet.generated.h"
 
+class UCharacterMovementComponent;
+
 #define ATTRIBUTE_ACCESSORS(ClassName, PropertyName) \
     GAMEPLAYATTRIBUTE_PROPERTY_GETTER(ClassName, PropertyName) \
     GAMEPLAYATTRIBUTE_VALUE_GETTER(PropertyName) \
@@ -43,6 +45,7 @@ public:
     virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 
 protected:
+    // 리플리케이션 응답
     UFUNCTION()
     virtual void OnRep_Health(const FGameplayAttributeData& OldHealth);
 
@@ -54,4 +57,10 @@ protected:
 
     UFUNCTION()
     virtual void OnRep_AttackPower(const FGameplayAttributeData& OldAttackPower);
+
+private:
+    // 헬퍼 함수들
+    void HandleHealthChange();
+    void HandleMoveSpeedChange();
+    void ApplyMovementRestrictions(UCharacterMovementComponent* MovementComp, float Speed);
 };
