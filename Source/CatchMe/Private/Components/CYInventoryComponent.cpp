@@ -32,26 +32,54 @@ void UCYInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 
 bool UCYInventoryComponent::AddItem(ACYItemBase* Item, int32 SlotIndex)
 {
-    if (!Item) return false;
+    UE_LOG(LogTemp, Warning, TEXT("📦 AddItem called for: %s"), 
+           Item ? *Item->ItemName.ToString() : TEXT("NULL"));
+    
+    if (!Item) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ AddItem: Item is null"));
+        return false;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("📦 AddItem: Item tag is: %s"), *Item->ItemTag.ToString());
 
     FGameplayTag WeaponTag = FGameplayTag::RequestGameplayTag("Item.Weapon");
+    UE_LOG(LogTemp, Warning, TEXT("📦 AddItem: WeaponTag is: %s"), *WeaponTag.ToString());
     
-    if (Item->ItemTag.MatchesTag(WeaponTag))
+    bool bIsWeapon = Item->ItemTag.MatchesTag(WeaponTag);
+    UE_LOG(LogTemp, Warning, TEXT("📦 AddItem: Is weapon? %s"), bIsWeapon ? TEXT("YES") : TEXT("NO"));
+    
+    if (bIsWeapon)
     {
+        UE_LOG(LogTemp, Warning, TEXT("📦 AddItem: Adding as weapon..."));
         return AddWeapon(Item);
     }
     else
     {
+        UE_LOG(LogTemp, Warning, TEXT("📦 AddItem: Adding as item with stacking..."));
         return AddItemWithStacking(Item);
     }
 }
 
 bool UCYInventoryComponent::AddWeapon(ACYItemBase* Weapon)
 {
-    if (!Weapon) return false;
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ AddWeapon called for: %s"), 
+           Weapon ? *Weapon->ItemName.ToString() : TEXT("NULL"));
+    
+    if (!Weapon) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ AddWeapon: Weapon is null"));
+        return false;
+    }
 
     int32 EmptySlot = FindEmptyWeaponSlot();
-    if (EmptySlot == -1) return false;
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ AddWeapon: Empty slot found: %d"), EmptySlot);
+    
+    if (EmptySlot == -1) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ AddWeapon: No empty weapon slots"));
+        return false;
+    }
 
     WeaponSlots[EmptySlot] = Weapon;
     OnInventoryChanged.Broadcast(EmptySlot + 1000, Weapon);
@@ -59,28 +87,43 @@ bool UCYInventoryComponent::AddWeapon(ACYItemBase* Weapon)
     // 첫 번째 무기 자동 장착
     AutoEquipFirstWeapon(Cast<ACYWeaponBase>(Weapon));
     
-    UE_LOG(LogTemp, Log, TEXT("Weapon added to slot %d"), EmptySlot);
+    UE_LOG(LogTemp, Warning, TEXT("✅ AddWeapon: Weapon added to slot %d"), EmptySlot);
     return true;
 }
 
 bool UCYInventoryComponent::AddItemWithStacking(ACYItemBase* Item)
 {
-    if (!Item) return false;
+    UE_LOG(LogTemp, Warning, TEXT("🎒 AddItemWithStacking called for: %s"), 
+           Item ? *Item->ItemName.ToString() : TEXT("NULL"));
+    
+    if (!Item) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ AddItemWithStacking: Item is null"));
+        return false;
+    }
 
     // 1. 기존 스택에 추가 시도
+    UE_LOG(LogTemp, Warning, TEXT("🎒 AddItemWithStacking: Trying to stack with existing item..."));
     if (TryStackWithExistingItem(Item))
     {
+        UE_LOG(LogTemp, Warning, TEXT("✅ AddItemWithStacking: Successfully stacked with existing item"));
         return true;
     }
 
     // 2. 새 슬롯에 추가
     int32 EmptySlot = FindEmptyItemSlot();
-    if (EmptySlot == -1) return false;
+    UE_LOG(LogTemp, Warning, TEXT("🎒 AddItemWithStacking: Empty item slot found: %d"), EmptySlot);
+    
+    if (EmptySlot == -1) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ AddItemWithStacking: No empty item slots"));
+        return false;
+    }
 
     ItemSlots[EmptySlot] = Item;
     OnInventoryChanged.Broadcast(EmptySlot, Item);
     
-    UE_LOG(LogTemp, Log, TEXT("Item added to slot %d"), EmptySlot);
+    UE_LOG(LogTemp, Warning, TEXT("✅ AddItemWithStacking: Item added to slot %d"), EmptySlot);
     return true;
 }
 

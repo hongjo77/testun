@@ -13,6 +13,9 @@ ACYDamageTrap::ACYDamageTrap()
     ItemDescription = FText::FromString("Deals direct damage to enemies");
     TrapType = ETrapType::Damage;
     
+    // ✅ 트랩 배치 어빌리티 설정
+    // ItemAbility = UGA_PlaceTrap::StaticClass(); // 블루프린트에서 설정하는 것이 더 안전
+    
     // 데미지 트랩 설정
     TriggerRadius = 90.0f;
     DamageAmount = 75.0f;

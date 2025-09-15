@@ -11,7 +11,4 @@ class CATCHME_API ACYGameMode : public AGameModeBase
 
 public:
 	ACYGameMode();
-
-protected:
-	virtual void BeginPlay() override;
 };

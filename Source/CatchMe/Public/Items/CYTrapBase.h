@@ -9,6 +9,14 @@ class ACYPlayerCharacter;
 class UAbilitySystemComponent;
 class UGameplayEffect;
 
+// ✅ 트랩 상태 enum 추가
+UENUM(BlueprintType)
+enum class ETrapState : uint8
+{
+    MapPlaced       UMETA(DisplayName = "Map Placed (Pickupable)"),    // 맵에 배치된 상태 (픽업 가능)
+    PlayerPlaced    UMETA(DisplayName = "Player Placed (Active)")      // 플레이어가 설치한 상태 (활성화됨)
+};
+
 UCLASS(Abstract, BlueprintType)
 class CATCHME_API ACYTrapBase : public ACYItemBase
 {
@@ -16,6 +24,14 @@ class CATCHME_API ACYTrapBase : public ACYItemBase
 
 public:
     ACYTrapBase();
+
+    // ✅ 트랩 상태 추가
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trap State", Replicated)
+    ETrapState TrapState = ETrapState::MapPlaced;
+
+    // ✅ 플레이어가 설치한 트랩으로 전환하는 함수
+    UFUNCTION(BlueprintCallable, Category = "Trap")
+    void ConvertToPlayerPlacedTrap(AActor* PlacingPlayer);
 
     // 트랩 데이터 (데이터 테이블에서 가져올 수도 있음)
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Trap Data")
@@ -63,6 +79,7 @@ public:
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     // 트랩 시각적 설정 (하위 클래스에서 구현)
     UFUNCTION(BlueprintNativeEvent, Category = "Trap Visuals")
@@ -79,15 +96,28 @@ protected:
     void ApplyCustomEffects(ACYPlayerCharacter* Target);
     virtual void ApplyCustomEffects_Implementation(ACYPlayerCharacter* Target);
 
-    // 오버랩 이벤트 핸들러
+    // ✅ 상태별 오버랩 이벤트 핸들러
     UFUNCTION()
     void OnTriggerSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
         bool bFromSweep, const FHitResult& SweepResult);
 
+    // ✅ 픽업용 오버랩 핸들러 (부모 함수 호출용)
+    UFUNCTION()
+    void OnPickupSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+        UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+        bool bFromSweep, const FHitResult& SweepResult);
+
+    UFUNCTION()
+    void OnPickupSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+        UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+
     // 타이머 핸들러
     UFUNCTION()
     void ArmTrap();
+
+    // ✅ 트랩 상태 설정
+    void SetupTrapForCurrentState();
 
     // 개별 효과 적용
     void ApplySingleEffect(UAbilitySystemComponent* TargetASC, TSubclassOf<UGameplayEffect> EffectClass);

@@ -9,9 +9,3 @@ ACYGameMode::ACYGameMode()
 	DefaultPawnClass = ACYPlayerCharacter::StaticClass();
 	PlayerControllerClass = ACYPlayerController::StaticClass();
 }
-
-void ACYGameMode::BeginPlay()
-{
-	Super::BeginPlay();
-	FCYGameplayTags::InitializeNativeTags();
-}

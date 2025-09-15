@@ -57,16 +57,74 @@ bool UCYWeaponComponent::UnequipWeapon()
 
 bool UCYWeaponComponent::PerformAttack()
 {
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ PerformAttack called - HasAuthority: %s"), 
+           GetOwner()->HasAuthority() ? TEXT("true") : TEXT("false"));
+    
     // 서버에서만 실행
-    if (!GetOwner()->HasAuthority()) return false;
+    if (!GetOwner()->HasAuthority()) 
+    {
+        UE_LOG(LogTemp, Warning, TEXT("❌ PerformAttack: Not authority, returning false"));
+        return false;
+    }
 
     // 무기가 있으면 공격만 수행
     if (CurrentWeapon) 
     {
+        UE_LOG(LogTemp, Warning, TEXT("🗡️ PerformAttack: CurrentWeapon found: %s"), 
+               *CurrentWeapon->ItemName.ToString());
         return ExecuteWeaponAttack();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("❌ PerformAttack: No CurrentWeapon equipped"));
     }
     
     return false;
+}
+
+bool UCYWeaponComponent::ExecuteWeaponAttack()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ ExecuteWeaponAttack called"));
+    
+    if (!CurrentWeapon) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ ExecuteWeaponAttack: CurrentWeapon is null"));
+        return false;
+    }
+
+    UCYAbilitySystemComponent* ASC = GetOwnerAbilitySystemComponent();
+    if (!ASC) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ ExecuteWeaponAttack: AbilitySystemComponent is null"));
+        return false;
+    }
+
+    const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ ExecuteWeaponAttack: Trying to activate ability with tag: %s"), 
+           *GameplayTags.Ability_Weapon_Attack.ToString());
+    
+    // ✅ 디버깅: 어빌리티가 존재하는지 확인
+    FGameplayTagContainer TagContainer;
+    TagContainer.AddTag(GameplayTags.Ability_Weapon_Attack);
+    
+    TArray<FGameplayAbilitySpec*> ActivatableAbilities;
+    ASC->GetActivatableGameplayAbilitySpecsByAllMatchingTags(TagContainer, ActivatableAbilities);
+    
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ Found %d activatable abilities with Weapon Attack tag"), ActivatableAbilities.Num());
+    
+    for (int32 i = 0; i < ActivatableAbilities.Num(); ++i)
+    {
+        if (ActivatableAbilities[i] && ActivatableAbilities[i]->Ability)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("  - Ability %d: %s"), i, 
+                   *ActivatableAbilities[i]->Ability->GetClass()->GetName());
+        }
+    }
+    
+    bool bResult = ASC->TryActivateAbilityByTag(GameplayTags.Ability_Weapon_Attack);
+    
+    UE_LOG(LogTemp, Log, TEXT("Weapon attack: %s"), bResult ? TEXT("Success") : TEXT("Failed"));
+    return bResult;
 }
 
 void UCYWeaponComponent::DisplayInventoryStatus()
@@ -146,20 +204,6 @@ void UCYWeaponComponent::ClientDisplayInventoryStatus_Implementation()
 {
     // ✅ RPC 버전은 일반 함수 호출
     DisplayInventoryStatus();
-}
-
-bool UCYWeaponComponent::ExecuteWeaponAttack()
-{
-    if (!CurrentWeapon) return false;
-
-    UCYAbilitySystemComponent* ASC = GetOwnerAbilitySystemComponent();
-    if (!ASC) return false;
-
-    const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
-    bool bResult = ASC->TryActivateAbilityByTag(GameplayTags.Ability_Weapon_Attack);
-    
-    UE_LOG(LogTemp, Log, TEXT("Weapon attack: %s"), bResult ? TEXT("Success") : TEXT("Failed"));
-    return bResult;
 }
 
 bool UCYWeaponComponent::PerformLineTrace(FHitResult& OutHit, float Range)

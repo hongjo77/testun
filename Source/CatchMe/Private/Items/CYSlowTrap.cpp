@@ -13,6 +13,9 @@ ACYSlowTrap::ACYSlowTrap()
     ItemDescription = FText::FromString("Slows down enemies who step on it");
     TrapType = ETrapType::Slow;
     
+    // ✅ 트랩 배치 어빌리티 설정 (하드코딩 - 나중에 BP에서 설정 가능)
+    // ItemAbility = UGA_PlaceTrap::StaticClass(); // 블루프린트에서 설정하는 것이 더 안전
+    
     // 슬로우 트랩 설정
     TriggerRadius = 120.0f;
     SlowPercentage = 0.5f; // 50% 감소

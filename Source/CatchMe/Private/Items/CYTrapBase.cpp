@@ -10,6 +10,7 @@
 #include "CYGameplayTags.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
+#include "Net/UnrealNetwork.h"
 
 ACYTrapBase::ACYTrapBase()
 {
@@ -20,13 +21,8 @@ ACYTrapBase::ACYTrapBase()
     MaxStackCount = 5;
     ItemCount = 1;
     TrapType = ETrapType::Slow; // 기본값
+    TrapState = ETrapState::MapPlaced; // ✅ 기본적으로 맵 배치 상태
 
-    // 트랩은 픽업 불가로 설정
-    if (InteractionSphere)
-    {
-        InteractionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    }
-    
     // 기본 메시 설정
     if (ItemMesh)
     {
@@ -49,24 +45,170 @@ ACYTrapBase::ACYTrapBase()
     TrapData.TrapLifetime = TrapLifetime;
 }
 
+void ACYTrapBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(ACYTrapBase, TrapState);
+}
+
 void ACYTrapBase::BeginPlay()
 {
     Super::BeginPlay();
 
     if (HasAuthority())
     {
+        // ✅ 상태별 트랩 설정
+        SetupTrapForCurrentState();
+        
         // 트랩 스폰 이벤트
         OnTrapSpawned();
-        
-        // 타이머 설정
-        SetupTrapTimers();
         
         // 시각적 설정
         SetupTrapVisuals();
     }
 
-    UE_LOG(LogTemp, Log, TEXT("🎯 Trap spawned: %s (Type: %d)"), 
-           *ItemName.ToString(), static_cast<int32>(TrapType));
+    UE_LOG(LogTemp, Log, TEXT("🎯 Trap spawned: %s (Type: %d, State: %s)"), 
+           *ItemName.ToString(), 
+           static_cast<int32>(TrapType),
+           TrapState == ETrapState::MapPlaced ? TEXT("MapPlaced") : TEXT("PlayerPlaced"));
+}
+
+void ACYTrapBase::SetupTrapForCurrentState()
+{
+    if (!InteractionSphere) return;
+
+    if (TrapState == ETrapState::MapPlaced)
+    {
+        // ✅ 맵 배치 상태: 픽업 가능 (래퍼 함수 사용)
+        InteractionSphere->SetSphereRadius(150.0f); // 픽업 범위
+        InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+        InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+        InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+        
+        // ✅ 래퍼 함수를 통한 바인딩
+        InteractionSphere->OnComponentBeginOverlap.Clear();
+        InteractionSphere->OnComponentEndOverlap.Clear();
+        InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnPickupSphereOverlap);
+        InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &ACYTrapBase::OnPickupSphereEndOverlap);
+        
+        UE_LOG(LogTemp, Warning, TEXT("🎯 Trap set as PICKUPABLE: %s"), *ItemName.ToString());
+    }
+    else if (TrapState == ETrapState::PlayerPlaced)
+    {
+        // ✅ 플레이어 배치 상태: 트리거 모드 (타이머 후 활성화)
+        SetupTrapTimers(); // 플레이어가 설치한 경우에만 타이머 시작
+        
+        UE_LOG(LogTemp, Warning, TEXT("🎯 Trap set as ACTIVE: %s"), *ItemName.ToString());
+    }
+}
+
+void ACYTrapBase::ConvertToPlayerPlacedTrap(AActor* PlacingPlayer)
+{
+    if (!HasAuthority()) return;
+
+    // ✅ 상태 변경
+    TrapState = ETrapState::PlayerPlaced;
+    
+    // ✅ 소유자 설정 (설치한 플레이어)
+    SetOwner(PlacingPlayer);
+    
+    // ✅ 픽업 불가능하게 설정
+    bIsPickedUp = true;
+    
+    // ✅ 상태에 맞게 재설정
+    SetupTrapForCurrentState();
+    
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Trap converted to PlayerPlaced by %s"), 
+           PlacingPlayer ? *PlacingPlayer->GetName() : TEXT("Unknown"));
+}
+
+void ACYTrapBase::SetupTrapTimers()
+{
+    // ✅ 플레이어가 설치한 트랩만 타이머 설정
+    if (TrapState != ETrapState::PlayerPlaced) return;
+
+    // 트랩 활성화 타이머
+    GetWorld()->GetTimerManager().SetTimer(ArmingTimer, this, &ACYTrapBase::ArmTrap, 
+                                          TrapData.ArmingDelay, false);
+    
+    // 트랩 수명 타이머
+    GetWorld()->GetTimerManager().SetTimer(LifetimeTimer, [this]()
+    {
+        Destroy();
+    }, TrapData.TrapLifetime, false);
+}
+
+void ACYTrapBase::ArmTrap()
+{
+    if (!HasAuthority() || TrapState != ETrapState::PlayerPlaced) return;
+
+    bIsArmed = true;
+
+    // ✅ 트리거 영역으로 재설정
+    if (InteractionSphere)
+    {
+        InteractionSphere->SetSphereRadius(TrapData.TriggerRadius);
+        InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+        InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+        InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+        
+        // 기존 바인딩 제거 후 트리거 바인딩
+        InteractionSphere->OnComponentBeginOverlap.Clear();
+        InteractionSphere->OnComponentEndOverlap.Clear();
+        InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnTriggerSphereOverlap);
+    }
+
+    // 트랩 활성화 이벤트
+    OnTrapArmed();
+
+    UE_LOG(LogTemp, Log, TEXT("✅ Trap armed and ready: %s"), *ItemName.ToString());
+}
+
+void ACYTrapBase::OnTriggerSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+        UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+        bool bFromSweep, const FHitResult& SweepResult)
+{
+    // ✅ 오직 플레이어가 설치한 트랩만 트리거됨
+    if (TrapState != ETrapState::PlayerPlaced || !bIsArmed || !HasAuthority()) return;
+
+    // ✅ 설치한 사람은 자신의 트랩에 걸리지 않음
+    if (OtherActor == GetOwner())
+    {
+        UE_LOG(LogTemp, Log, TEXT("🚫 Trap owner stepped on own trap - ignoring"));
+        return;
+    }
+
+    ACYPlayerCharacter* Target = Cast<ACYPlayerCharacter>(OtherActor);
+    if (!Target) return;
+
+    UE_LOG(LogTemp, Warning, TEXT("💥 TRAP TRIGGERED! %s stepped on %s's trap"), 
+           *Target->GetName(), 
+           GetOwner() ? *GetOwner()->GetName() : TEXT("Unknown"));
+
+    // 트랩 트리거 이벤트
+    OnTrapTriggered(Target);
+    
+    // 효과 적용
+    ApplyTrapEffects(Target);
+    
+    // 트랩 파괴
+    Destroy();
+}
+
+// ✅ 픽업용 래퍼 함수들 (부모 클래스의 protected 함수 호출)
+void ACYTrapBase::OnPickupSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+    UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+    bool bFromSweep, const FHitResult& SweepResult)
+{
+    // 부모 클래스의 픽업 함수 호출
+    OnSphereOverlap(OverlappedComponent, OtherActor, OtherComp, OtherBodyIndex, bFromSweep, SweepResult);
+}
+
+void ACYTrapBase::OnPickupSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+    UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+    // 부모 클래스의 픽업 함수 호출
+    OnSphereEndOverlap(OverlappedComponent, OtherActor, OtherComp, OtherBodyIndex);
 }
 
 void ACYTrapBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -144,66 +286,6 @@ void ACYTrapBase::ApplyCustomEffects_Implementation(ACYPlayerCharacter* Target)
 {
     // 기본 구현 - 하위 클래스에서 오버라이드
     UE_LOG(LogTemp, Log, TEXT("🎯 Applying base custom effects"));
-}
-
-void ACYTrapBase::SetupTrapTimers()
-{
-    // 트랩 활성화 타이머
-    GetWorld()->GetTimerManager().SetTimer(ArmingTimer, this, &ACYTrapBase::ArmTrap, 
-                                          TrapData.ArmingDelay, false);
-    
-    // 트랩 수명 타이머
-    GetWorld()->GetTimerManager().SetTimer(LifetimeTimer, [this]()
-    {
-        Destroy();
-    }, TrapData.TrapLifetime, false);
-}
-
-void ACYTrapBase::ArmTrap()
-{
-    if (!HasAuthority()) return;
-
-    bIsArmed = true;
-
-    // 트리거 영역 설정
-    if (!InteractionSphere)
-    {
-        InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("TriggerSphere"));
-        InteractionSphere->SetupAttachment(RootComponent);
-    }
-    
-    InteractionSphere->SetSphereRadius(TrapData.TriggerRadius);
-    InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-    InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
-    InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-    
-    // 기존 바인딩 제거 후 트리거 바인딩
-    InteractionSphere->OnComponentBeginOverlap.Clear();
-    InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnTriggerSphereOverlap);
-
-    // 트랩 활성화 이벤트
-    OnTrapArmed();
-
-    UE_LOG(LogTemp, Log, TEXT("✅ Trap armed and ready: %s"), *ItemName.ToString());
-}
-
-void ACYTrapBase::OnTriggerSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-        UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
-        bool bFromSweep, const FHitResult& SweepResult)
-{
-    if (!bIsArmed || !HasAuthority() || OtherActor == GetOwner()) return;
-
-    ACYPlayerCharacter* Target = Cast<ACYPlayerCharacter>(OtherActor);
-    if (!Target) return;
-
-    // 트랩 트리거 이벤트
-    OnTrapTriggered(Target);
-    
-    // 효과 적용
-    ApplyTrapEffects(Target);
-    
-    // 트랩 파괴
-    Destroy();
 }
 
 void ACYTrapBase::ApplyTrapEffects(ACYPlayerCharacter* Target)

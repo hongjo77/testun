@@ -13,6 +13,9 @@ ACYFreezeTrap::ACYFreezeTrap()
     ItemDescription = FText::FromString("Completely immobilizes enemies");
     TrapType = ETrapType::Freeze;
     
+    // ✅ 트랩 배치 어빌리티 설정
+    // ItemAbility = UGA_PlaceTrap::StaticClass(); // 블루프린트에서 설정하는 것이 더 안전
+    
     // 프리즈 트랩 설정
     TriggerRadius = 100.0f;
     FreezeDuration = 3.0f;

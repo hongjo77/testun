@@ -51,7 +51,10 @@ ACYTrapBase* UCYTrapFactory::CreateTrap(UWorld* World, ETrapType TrapType, const
     
     if (NewTrap)
     {
-        UE_LOG(LogTemp, Log, TEXT("✅ Created trap of type %s at location %s"), 
+        // ✅ 플레이어가 설치한 트랩으로 변환
+        NewTrap->ConvertToPlayerPlacedTrap(Owner);
+        
+        UE_LOG(LogTemp, Log, TEXT("✅ Created PLAYER PLACED trap of type %s at location %s"), 
                *TrapClass->GetName(), *Location.ToString());
     }
     else
@@ -75,7 +78,7 @@ ACYTrapBase* UCYTrapFactory::CreateTrapFromItem(UWorld* World, ACYItemBase* Sour
     // 아이템으로부터 트랩 타입 추론
     ETrapType TrapType = InferTrapTypeFromItem(SourceItem);
     
-    UE_LOG(LogTemp, Warning, TEXT("🎯 Creating trap from item: %s -> TrapType: %d"), 
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Creating PLAYER PLACED trap from item: %s -> TrapType: %d"), 
            *SourceItem->ItemName.ToString(), static_cast<int32>(TrapType));
 
     return CreateTrap(World, TrapType, Location, Rotation, Owner, Instigator);
