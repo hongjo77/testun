@@ -21,7 +21,7 @@ protected:
     virtual void BeginPlay() override;
     virtual void SetupInputComponent() override;
 
-    // Enhanced Input
+    // Enhanced Input 설정
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
     UInputMappingContext* DefaultMappingContext;
 
@@ -40,7 +40,7 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
     UInputAction* PrimaryAttackAction;
 
-    // 인벤토리 액션들
+    // 인벤토리 입력 액션들
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
     UInputAction* UseItem1Action;
 
@@ -68,17 +68,18 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
     UInputAction* UseItem9Action;
 
-    // Input Callbacks
+    // 입력 콜백 함수들
     void Move(const struct FInputActionValue& Value);
     void Look(const FInputActionValue& Value);
     void JumpPressed();
     void JumpReleased();
     void InteractPressed();
-    void PrimaryAttackPressed(); // 클라이언트에서 호출
+    void PrimaryAttackPressed();
 
-    // 🔥 RPC 함수들
+    // 서버 RPC 함수들
     UFUNCTION(Server, Reliable)
     void ServerAttackPressed();
+
     UFUNCTION(Server, Reliable)
     void ServerDisplayInventory();
 
@@ -93,8 +94,15 @@ protected:
     void UseInventorySlot8();
     void UseInventorySlot9();
 
-    void DisplayInventoryOnClient();
+    // ✅ 개선된 함수
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void UseInventorySlotByKey(int32 KeyNumber);
 
-private:
+    // 레거시 호환성 함수
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
     void UseInventorySlot(int32 SlotIndex);
+
+    // 인벤토리 화면 표시 (기존 기능 유지)
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void DisplayInventoryOnClient();
 };
