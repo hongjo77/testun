@@ -49,7 +49,7 @@ void UGA_WeaponAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     PerformAttack();
 
     // 쿨다운 적용
-    ApplyCooldown(Handle, ActorInfo, ActivationInfo);
+    ApplyWeaponCooldown(Handle, ActorInfo, ActivationInfo);
 
     UE_LOG(LogTemp, Log, TEXT("Weapon attack completed"));
     EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
@@ -105,7 +105,7 @@ void UGA_WeaponAttack::ApplyDamageToTarget(UAbilitySystemComponent* TargetASC, c
     }
 }
 
-void UGA_WeaponAttack::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, 
+void UGA_WeaponAttack::ApplyWeaponCooldown(const FGameplayAbilitySpecHandle Handle, 
     const FGameplayAbilityActorInfo* ActorInfo, 
     const FGameplayAbilityActivationInfo ActivationInfo)
 {

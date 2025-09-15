@@ -4,21 +4,28 @@
 #include "AbilitySystemComponent.h"
 #include "TimerManager.h"
 #include "Components/SphereComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GAS/CYAttributeSet.h"
 #include "GAS/CYGameplayEffects.h"
 #include "CYGameplayTags.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 
 ACYTrapBase::ACYTrapBase()
 {
-    ItemName = FText::FromString("Trap");
-    ItemDescription = FText::FromString("A placeable trap");
+    ItemName = FText::FromString("Base Trap");
+    ItemDescription = FText::FromString("A base trap class");
     ItemTag = FGameplayTag::RequestGameplayTag("Item.Trap");
 
     MaxStackCount = 5;
     ItemCount = 1;
+    TrapType = ETrapType::Slow; // 기본값
 
-    // 트랩은 픽업 불가
-    InteractionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    // 트랩은 픽업 불가로 설정
+    if (InteractionSphere)
+    {
+        InteractionSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    }
     
     // 기본 메시 설정
     if (ItemMesh)
@@ -33,32 +40,123 @@ ACYTrapBase::ACYTrapBase()
         ItemMesh->SetVisibility(true);
     }
 
-    // ✅ 기본값 설정 제거 - GA_PlaceTrap에서 처리
+    // 기본 트랩 데이터 초기화
+    TrapData.TrapType = TrapType;
+    TrapData.TrapName = ItemName;
+    TrapData.TrapDescription = ItemDescription;
+    TrapData.TriggerRadius = TriggerRadius;
+    TrapData.ArmingDelay = ArmingDelay;
+    TrapData.TrapLifetime = TrapLifetime;
 }
 
 void ACYTrapBase::BeginPlay()
 {
     Super::BeginPlay();
 
-    // ✅ ItemEffects 검증만 수행 (설정은 GA_PlaceTrap에서 완료)
-    UE_LOG(LogTemp, Log, TEXT("Trap armed with %d effects"), ItemEffects.Num());
-
     if (HasAuthority())
     {
+        // 트랩 스폰 이벤트
+        OnTrapSpawned();
+        
+        // 타이머 설정
         SetupTrapTimers();
+        
+        // 시각적 설정
+        SetupTrapVisuals();
     }
+
+    UE_LOG(LogTemp, Log, TEXT("🎯 Trap spawned: %s (Type: %d)"), 
+           *ItemName.ToString(), static_cast<int32>(TrapType));
+}
+
+void ACYTrapBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    // 트랩 파괴 이벤트
+    OnTrapDestroyed();
+    
+    Super::EndPlay(EndPlayReason);
+}
+
+void ACYTrapBase::OnTrapSpawned_Implementation()
+{
+    // 기본 구현 - 하위 클래스에서 오버라이드 가능
+    UE_LOG(LogTemp, Log, TEXT("🔧 Base trap spawned"));
+}
+
+void ACYTrapBase::OnTrapArmed_Implementation()
+{
+    // 기본 구현 - 하위 클래스에서 오버라이드 가능
+    UE_LOG(LogTemp, Warning, TEXT("⚡ Base trap armed"));
+    
+    // 사운드 재생
+    PlayTrapSound();
+}
+
+void ACYTrapBase::OnTrapTriggered_Implementation(ACYPlayerCharacter* Target)
+{
+    // 기본 구현 - 하위 클래스에서 오버라이드 가능
+    if (Target)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("💥 Base trap triggered on %s"), *Target->GetName());
+    }
+}
+
+void ACYTrapBase::OnTrapDestroyed_Implementation()
+{
+    // 기본 구현 - 하위 클래스에서 오버라이드 가능
+    UE_LOG(LogTemp, Log, TEXT("🗑️ Base trap destroyed"));
+}
+
+void ACYTrapBase::SetupTrapVisuals_Implementation()
+{
+    // 기본 구현 - 하위 클래스에서 오버라이드
+    if (ItemMesh && TrapData.TrapMesh)
+    {
+        ItemMesh->SetStaticMesh(TrapData.TrapMesh);
+    }
+    
+    // 색상 설정
+    if (ItemMesh)
+    {
+        // Create dynamic material instance and set color
+        UMaterialInterface* Material = ItemMesh->GetMaterial(0);
+        if (Material)
+        {
+            UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(Material, this);
+            if (DynamicMaterial)
+            {
+                DynamicMaterial->SetVectorParameterValue(TEXT("BaseColor"), TrapData.TrapColor);
+                ItemMesh->SetMaterial(0, DynamicMaterial);
+            }
+        }
+    }
+}
+
+void ACYTrapBase::PlayTrapSound_Implementation()
+{
+    if (TrapData.TriggerSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(GetWorld(), TrapData.TriggerSound, GetActorLocation());
+    }
+}
+
+void ACYTrapBase::ApplyCustomEffects_Implementation(ACYPlayerCharacter* Target)
+{
+    // 기본 구현 - 하위 클래스에서 오버라이드
+    UE_LOG(LogTemp, Log, TEXT("🎯 Applying base custom effects"));
 }
 
 void ACYTrapBase::SetupTrapTimers()
 {
     // 트랩 활성화 타이머
-    GetWorld()->GetTimerManager().SetTimer(ArmingTimer, this, &ACYTrapBase::ArmTrap, ArmingDelay, false);
+    GetWorld()->GetTimerManager().SetTimer(ArmingTimer, this, &ACYTrapBase::ArmTrap, 
+                                          TrapData.ArmingDelay, false);
     
     // 트랩 수명 타이머
     GetWorld()->GetTimerManager().SetTimer(LifetimeTimer, [this]()
     {
         Destroy();
-    }, TrapLifetime, false);
+    }, TrapData.TrapLifetime, false);
 }
 
 void ACYTrapBase::ArmTrap()
@@ -67,16 +165,6 @@ void ACYTrapBase::ArmTrap()
 
     bIsArmed = true;
 
-    // ✅ 이 시점에서 효과 개수 확인 및 로그 출력
-    UE_LOG(LogTemp, Warning, TEXT("🎯 Trap armed with %d effects"), ItemEffects.Num());
-    for (int32 i = 0; i < ItemEffects.Num(); i++)
-    {
-        if (ItemEffects[i])
-        {
-            UE_LOG(LogTemp, Warning, TEXT("  Effect[%d]: %s"), i, *ItemEffects[i]->GetName());
-        }
-    }
-
     // 트리거 영역 설정
     if (!InteractionSphere)
     {
@@ -84,19 +172,22 @@ void ACYTrapBase::ArmTrap()
         InteractionSphere->SetupAttachment(RootComponent);
     }
     
-    InteractionSphere->SetSphereRadius(TriggerRadius);
+    InteractionSphere->SetSphereRadius(TrapData.TriggerRadius);
     InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
     
     // 기존 바인딩 제거 후 트리거 바인딩
     InteractionSphere->OnComponentBeginOverlap.Clear();
-    InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnTrapTriggered);
+    InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnTriggerSphereOverlap);
 
-    UE_LOG(LogTemp, Log, TEXT("✅ Trap armed and ready"));
+    // 트랩 활성화 이벤트
+    OnTrapArmed();
+
+    UE_LOG(LogTemp, Log, TEXT("✅ Trap armed and ready: %s"), *ItemName.ToString());
 }
 
-void ACYTrapBase::OnTrapTriggered(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+void ACYTrapBase::OnTriggerSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
         bool bFromSweep, const FHitResult& SweepResult)
 {
@@ -105,19 +196,35 @@ void ACYTrapBase::OnTrapTriggered(UPrimitiveComponent* OverlappedComponent, AAct
     ACYPlayerCharacter* Target = Cast<ACYPlayerCharacter>(OtherActor);
     if (!Target) return;
 
-    ApplyTrapEffectsToTarget(Target);
+    // 트랩 트리거 이벤트
+    OnTrapTriggered(Target);
+    
+    // 효과 적용
+    ApplyTrapEffects(Target);
+    
+    // 트랩 파괴
     Destroy();
 }
 
-void ACYTrapBase::ApplyTrapEffectsToTarget(ACYPlayerCharacter* Target)
+void ACYTrapBase::ApplyTrapEffects(ACYPlayerCharacter* Target)
 {
+    if (!Target) return;
+
     UAbilitySystemComponent* TargetASC = Target->GetAbilitySystemComponent();
     if (!TargetASC) return;
 
-    UE_LOG(LogTemp, Warning, TEXT("Trap triggered on %s with %d effects"), 
-           *Target->GetName(), ItemEffects.Num());
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Applying trap effects to %s"), *Target->GetName());
 
-    // 모든 효과 적용
+    // 기본 게임플레이 효과들 적용
+    for (TSubclassOf<UGameplayEffect> EffectClass : TrapData.GameplayEffects)
+    {
+        if (EffectClass)
+        {
+            ApplySingleEffect(TargetASC, EffectClass);
+        }
+    }
+
+    // 레거시 ItemEffects도 적용 (호환성)
     for (TSubclassOf<UGameplayEffect> EffectClass : ItemEffects)
     {
         if (EffectClass)
@@ -125,10 +232,18 @@ void ACYTrapBase::ApplyTrapEffectsToTarget(ACYPlayerCharacter* Target)
             ApplySingleEffect(TargetASC, EffectClass);
         }
     }
+
+    // 하위 클래스별 커스텀 효과
+    ApplyCustomEffects(Target);
+
+    UE_LOG(LogTemp, Log, TEXT("✅ Applied %d trap effects"), 
+           TrapData.GameplayEffects.Num() + ItemEffects.Num());
 }
 
 void ACYTrapBase::ApplySingleEffect(UAbilitySystemComponent* TargetASC, TSubclassOf<UGameplayEffect> EffectClass)
 {
+    if (!TargetASC || !EffectClass) return;
+
     FGameplayEffectContextHandle EffectContext = TargetASC->MakeEffectContext();
     EffectContext.AddSourceObject(this);
     

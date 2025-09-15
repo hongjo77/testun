@@ -79,6 +79,8 @@ protected:
     // 🔥 RPC 함수들
     UFUNCTION(Server, Reliable)
     void ServerAttackPressed();
+    UFUNCTION(Server, Reliable)
+    void ServerDisplayInventory();
 
     // 인벤토리 슬롯 함수들
     void UseInventorySlot1();

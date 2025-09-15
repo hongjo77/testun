@@ -1,20 +1,18 @@
 ﻿#include "Abilities/GA_PlaceTrap.h"
-#include "Items/CYTrapBase.h"
+#include "Items/CYTrapFactory.h"
 #include "Items/CYItemBase.h"
 #include "Engine/World.h"
-#include "GAS/CYAbilitySystemComponent.h"
 #include "GAS/CYGameplayEffects.h"
 #include "CYGameplayTags.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CYWeaponComponent.h"
+#include "Items/CYTrapBase.h"
 
 UGA_PlaceTrap::UGA_PlaceTrap()
 {
     InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
     NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
-    TrapClass = ACYTrapBase::StaticClass();
-    
     const FCYGameplayTags& GameplayTags = FCYGameplayTags::Get();
     
     FGameplayTagContainer AssetTags;
@@ -39,8 +37,9 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     }
 
     AActor* OwnerActor = GetAvatarActorFromActorInfo();
-    if (!OwnerActor || !TrapClass)
+    if (!OwnerActor)
     {
+        UE_LOG(LogTemp, Error, TEXT("❌ GA_PlaceTrap: OwnerActor is null"));
         EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
         return;
     }
@@ -49,25 +48,52 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     const FGameplayTagContainer* CooldownTags = GetCooldownTags();
     if (CooldownTags && ActorInfo->AbilitySystemComponent->HasAnyMatchingGameplayTags(*CooldownTags))
     {
+        UE_LOG(LogTemp, Warning, TEXT("⏰ GA_PlaceTrap: On cooldown"));
         EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
         return;
     }
+
+    // ✅ 단순한 SourceObject 방식만 사용
+    ACYItemBase* SourceItem = nullptr;
+    const FGameplayAbilitySpec* CurrentSpec = GetCurrentAbilitySpec();
+    if (CurrentSpec && CurrentSpec->SourceObject.IsValid())
+    {
+        SourceItem = Cast<ACYItemBase>(CurrentSpec->SourceObject.Get());
+    }
+
+    if (!SourceItem)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ GA_PlaceTrap: No valid source item found"));
+        EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("🚀 GA_PlaceTrap: Creating trap from item: %s"), 
+           *SourceItem->ItemName.ToString());
 
     // 트랩 설치 위치 계산
     FVector SpawnLocation = CalculateSpawnLocation(OwnerActor);
     FRotator SpawnRotation = OwnerActor->GetActorRotation();
 
-    // 트랩 스폰
-    FActorSpawnParameters SpawnParams;
-    SpawnParams.Owner = OwnerActor;
-    SpawnParams.Instigator = Cast<APawn>(OwnerActor);
-    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-    
-    if (ACYTrapBase* Trap = GetWorld()->SpawnActor<ACYTrapBase>(TrapClass, SpawnLocation, SpawnRotation, SpawnParams))
+    // ✅ 팩토리를 통한 트랩 생성 (완전히 위임)
+    ACYTrapBase* NewTrap = UCYTrapFactory::CreateTrapFromItem(
+        GetWorld(),
+        SourceItem,
+        SpawnLocation,
+        SpawnRotation,
+        OwnerActor,
+        Cast<APawn>(OwnerActor)
+    );
+
+    if (NewTrap)
     {
-        // ✅ 트랩 생성 후 즉시 커스텀 효과 설정 (TriggerEventData 전달)
-        ConfigureTrapEffects(Trap, TriggerEventData);
-        UE_LOG(LogTemp, Log, TEXT("Trap placed with %d effects"), Trap->ItemEffects.Num());
+        UE_LOG(LogTemp, Warning, TEXT("✅ Trap successfully created: %s"), 
+               *NewTrap->GetClass()->GetName());
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ Failed to create trap from item: %s"), 
+               *SourceItem->ItemName.ToString());
     }
 
     // 쿨다운 적용
@@ -77,91 +103,27 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 
 FVector UGA_PlaceTrap::CalculateSpawnLocation(AActor* OwnerActor)
 {
+    if (!OwnerActor)
+    {
+        return FVector::ZeroVector;
+    }
+
     FHitResult HitResult;
     UCYWeaponComponent* WeaponComp = OwnerActor->FindComponentByClass<UCYWeaponComponent>();
     
+    // 라인 트레이스로 정확한 위치 계산
     if (WeaponComp && WeaponComp->PerformLineTrace(HitResult, 300.0f))
     {
         return HitResult.Location;
     }
 
+    // 백업: 캐릭터 앞쪽에 배치
     FVector ForwardLocation = OwnerActor->GetActorLocation() + OwnerActor->GetActorForwardVector() * 200.0f;
     ForwardLocation.Z = OwnerActor->GetActorLocation().Z;
     return ForwardLocation;
 }
 
-void UGA_PlaceTrap::ConfigureTrapEffects(ACYTrapBase* Trap, const FGameplayEventData* TriggerEventData)
-{
-    if (!Trap) return;
-
-    UE_LOG(LogTemp, Warning, TEXT("🔧 ConfigureTrapEffects: Starting trap effect configuration"));
-
-    // ✅ 기본값 설정
-    Trap->ItemEffects.Empty();
-    Trap->ItemEffects.Add(UGE_ImmobilizeTrap::StaticClass());
-
-    // ✅ SourceObject에서 아이템 정보 가져오기 (단일 방법)
-    const FGameplayAbilitySpec* CurrentSpec = GetCurrentAbilitySpec();
-    if (CurrentSpec)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("✅ CurrentSpec found"));
-        
-        if (CurrentSpec->SourceObject.IsValid())
-        {
-            UObject* SourceObjectPtr = CurrentSpec->SourceObject.Get();
-            UE_LOG(LogTemp, Warning, TEXT("✅ SourceObject is valid: %s"), 
-                   SourceObjectPtr ? *SourceObjectPtr->GetName() : TEXT("NULL"));
-            
-            if (SourceObjectPtr)
-            {
-                if (const ACYItemBase* UsedItem = Cast<ACYItemBase>(SourceObjectPtr))
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("✅ Successfully cast to ACYItemBase: %s with %d DesiredTrapEffects"), 
-                           *UsedItem->ItemName.ToString(), UsedItem->DesiredTrapEffects.Num());
-                    
-                    if (UsedItem->DesiredTrapEffects.Num() > 0)
-                    {
-                        Trap->ItemEffects = UsedItem->DesiredTrapEffects;
-                        UE_LOG(LogTemp, Warning, TEXT("🎯 Trap configured with %d CUSTOM effects from SourceObject"), 
-                               UsedItem->DesiredTrapEffects.Num());
-                        
-                        // 각 효과 클래스 이름 로그
-                        for (int32 i = 0; i < UsedItem->DesiredTrapEffects.Num(); i++)
-                        {
-                            if (UsedItem->DesiredTrapEffects[i])
-                            {
-                                UE_LOG(LogTemp, Warning, TEXT("  🔥 Effect[%d]: %s"), i, *UsedItem->DesiredTrapEffects[i]->GetName());
-                            }
-                        }
-                        return;
-                    }
-                    else
-                    {
-                        UE_LOG(LogTemp, Warning, TEXT("❌ DesiredTrapEffects is empty"));
-                    }
-                }
-                else
-                {
-                    UE_LOG(LogTemp, Error, TEXT("❌ SourceObject is not ACYItemBase. Object class: %s"), 
-                           *SourceObjectPtr->GetClass()->GetName());
-                }
-            }
-        }
-        else
-        {
-            UE_LOG(LogTemp, Error, TEXT("❌ SourceObject is NOT valid"));
-        }
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("❌ CurrentSpec is NULL"));
-    }
-
-    // 기본 효과 사용
-    UE_LOG(LogTemp, Warning, TEXT("❌ Using default ImmobilizeTrap effect"));
-}
-
-void UGA_PlaceTrap::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, 
+void UGA_PlaceTrap::ApplyTrapCooldown(const FGameplayAbilitySpecHandle Handle, 
     const FGameplayAbilityActorInfo* ActorInfo, 
     const FGameplayAbilityActivationInfo ActivationInfo)
 {

@@ -6,6 +6,7 @@
 #include "Components/CYInventoryComponent.h"
 #include "Components/CYWeaponComponent.h"
 #include "Items/CYItemBase.h"
+#include "Items/CYWeaponBase.h"
 
 ACYPlayerController::ACYPlayerController()
 {
@@ -122,15 +123,16 @@ void ACYPlayerController::InteractPressed()
 
 void ACYPlayerController::PrimaryAttackPressed()
 {
-    // ✅ 클라이언트에서만 인벤토리 표시 (데디케이티드 서버 대응)
+    UE_LOG(LogTemp, Warning, TEXT("🖱️ PrimaryAttackPressed called"));
+
+    // ✅ 항상 서버에 인벤토리 표시 요청 (서버 로그용)
+    ServerDisplayInventory();
+
+    // 클라이언트에서도 인벤토리 표시 (로컬 플레이어용)
     if (IsLocalController())
     {
         UE_LOG(LogTemp, Warning, TEXT("🖱️ PrimaryAttackPressed - IsLocalController: true"));
         DisplayInventoryOnClient();
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("🖱️ PrimaryAttackPressed - IsLocalController: false"));
     }
 
     // 무기가 있으면 서버에서 공격 처리
@@ -219,6 +221,7 @@ void ACYPlayerController::DisplayInventoryOnClient()
                 InventoryComp->WeaponSlots[i]->ItemCount
             );
             
+            // ✅ WeaponSlots가 ACYWeaponBase* 타입이면 Cast 불필요
             if (WeaponComp && WeaponComp->CurrentWeapon == InventoryComp->WeaponSlots[i])
             {
                 WeaponInfo += TEXT(" ⭐ EQUIPPED");
@@ -260,4 +263,76 @@ void ACYPlayerController::DisplayInventoryOnClient()
     
     GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::Yellow, TEXT("=================="));
     UE_LOG(LogTemp, Warning, TEXT("✅ Inventory displayed successfully"));
+}
+
+void ACYPlayerController::ServerDisplayInventory_Implementation()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🖱️ ServerDisplayInventory called on server"));
+    
+    ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn());
+    if (!PlayerCharacter)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ No PlayerCharacter on server"));
+        return;
+    }
+
+    UCYInventoryComponent* InventoryComp = PlayerCharacter->InventoryComponent;
+    UCYWeaponComponent* WeaponComp = PlayerCharacter->WeaponComponent;
+    
+    if (!InventoryComp)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ No InventoryComponent on server"));
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("✅ SERVER INVENTORY STATUS for %s:"), *PlayerCharacter->GetName());
+    UE_LOG(LogTemp, Warning, TEXT("=== 📦 SERVER INVENTORY STATUS ==="));
+    
+    // 무기 슬롯 (1~3번 키)
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ WEAPONS (Keys 1-3):"));
+    for (int32 i = 0; i < InventoryComp->WeaponSlots.Num(); ++i)
+    {
+        if (InventoryComp->WeaponSlots[i])
+        {
+            FString WeaponInfo = FString::Printf(TEXT("  [%d] %s x%d"), 
+                i + 1, 
+                *InventoryComp->WeaponSlots[i]->ItemName.ToString(), 
+                InventoryComp->WeaponSlots[i]->ItemCount
+            );
+            
+            // ✅ Cast 사용해서 타입 문제 해결
+            ACYWeaponBase* SlotWeapon = Cast<ACYWeaponBase>(InventoryComp->WeaponSlots[i]);
+            if (WeaponComp && WeaponComp->CurrentWeapon == SlotWeapon)
+            {
+                WeaponInfo += TEXT(" ⭐ EQUIPPED");
+            }
+            UE_LOG(LogTemp, Warning, TEXT("%s"), *WeaponInfo);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("  [%d] Empty"), i + 1);
+        }
+    }
+    
+    // 아이템 슬롯 (4~9번 키)
+    UE_LOG(LogTemp, Warning, TEXT("🎒 ITEMS (Keys 4-9):"));
+    int32 MaxDisplayItems = FMath::Min(6, InventoryComp->ItemSlots.Num());
+    for (int32 i = 0; i < MaxDisplayItems; ++i)
+    {
+        if (InventoryComp->ItemSlots[i])
+        {
+            FString ItemInfo = FString::Printf(TEXT("  [%d] %s x%d"), 
+                i + 4, 
+                *InventoryComp->ItemSlots[i]->ItemName.ToString(), 
+                InventoryComp->ItemSlots[i]->ItemCount
+            );
+            UE_LOG(LogTemp, Warning, TEXT("%s"), *ItemInfo);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("  [%d] Empty"), i + 4);
+        }
+    }
+    
+    UE_LOG(LogTemp, Warning, TEXT("=================="));
 }

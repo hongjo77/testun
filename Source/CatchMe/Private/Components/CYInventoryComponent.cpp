@@ -226,16 +226,12 @@ bool UCYInventoryComponent::ActivateItemAbility(ACYItemBase* Item, int32 SlotInd
         return false;
     }
 
-    // ✅ 안전한 SourceObject 방식 (Event 방식 제거)
+    // ✅ 단순한 SourceObject 설정
     Spec->SourceObject = Item;
     
-    UE_LOG(LogTemp, Warning, TEXT("🎯 Activating ability for item: %s with %d DesiredTrapEffects"), 
-           *Item->ItemName.ToString(), Item->DesiredTrapEffects.Num());
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Activating ability for item: %s"), *Item->ItemName.ToString());
     
-    UE_LOG(LogTemp, Warning, TEXT("🔍 SourceObject set to: %s"), 
-           Spec->SourceObject.IsValid() ? *Spec->SourceObject.Get()->GetName() : TEXT("INVALID"));
-    
-    // TryActivateAbility 사용 (Event 방식 제거)
+    // TryActivateAbility 사용
     bool bSuccess = ASC->TryActivateAbility(Spec->Handle);
     
     UE_LOG(LogTemp, Warning, TEXT("🎯 Item ability activation result: %s, Success=%s"), 

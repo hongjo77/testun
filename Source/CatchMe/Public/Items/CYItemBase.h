@@ -39,8 +39,7 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS")
     TArray<TSubclassOf<UGameplayEffect>> ItemEffects;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GAS")
-    TArray<TSubclassOf<UGameplayEffect>> DesiredTrapEffects;
+    // ✅ DesiredTrapEffects 제거됨 - 더 이상 복잡한 데이터 전달 불필요
 
     // Components
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")

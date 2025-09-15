@@ -28,7 +28,7 @@ protected:
 	bool IsOnCooldown(const FGameplayAbilityActorInfo* ActorInfo) const;
 	void ProcessHitTarget(const FHitResult& HitResult);
 	void ApplyDamageToTarget(UAbilitySystemComponent* TargetASC, const FHitResult& HitResult);
-	void ApplyCooldown(const FGameplayAbilitySpecHandle Handle, 
+	void ApplyWeaponCooldown(const FGameplayAbilitySpecHandle Handle, 
 		const FGameplayAbilityActorInfo* ActorInfo, 
 		const FGameplayAbilityActivationInfo ActivationInfo);
 };
