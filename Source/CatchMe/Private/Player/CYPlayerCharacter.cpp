@@ -1,4 +1,4 @@
-// CYPlayerCharacter.cpp - 정리된 버전
+// CYPlayerCharacter.cpp - 어빌리티 중복 등록 방지
 #include "Player/CYPlayerCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -55,9 +55,12 @@ ACYPlayerCharacter::ACYPlayerCharacter()
     ItemInteractionComponent = CreateDefaultSubobject<UCYItemInteractionComponent>(TEXT("ItemInteractionComponent"));
     WeaponComponent = CreateDefaultSubobject<UCYWeaponComponent>(TEXT("WeaponComponent"));
 
-    // 기본 어빌리티
+    // ✅ 기본 어빌리티 - 각각 한 번만 등록
     DefaultAbilities.Add(UGA_WeaponAttack::StaticClass());
     DefaultAbilities.Add(UGA_PlaceTrap::StaticClass());
+    
+    // ✅ 중복 방지를 위한 플래그
+    bAbilitiesGranted = false;
 }
 
 void ACYPlayerCharacter::BeginPlay()
@@ -94,6 +97,7 @@ void ACYPlayerCharacter::OnRep_PlayerState()
 void ACYPlayerCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(ACYPlayerCharacter, bAbilitiesGranted); // ✅ 어빌리티 부여 상태 동기화
 }
 
 UAbilitySystemComponent* ACYPlayerCharacter::GetAbilitySystemComponent() const
@@ -159,24 +163,61 @@ void ACYPlayerCharacter::InitializeAbilitySystem()
 
     AbilitySystemComponent->InitAbilityActorInfo(this, this);
 
-    if (HasAuthority())
+    if (HasAuthority() && !bAbilitiesGranted)
     {
         GrantDefaultAbilities();
         ApplyInitialStats();
+        bAbilitiesGranted = true; // ✅ 중복 방지 플래그 설정
+        UE_LOG(LogTemp, Warning, TEXT("✅ Abilities granted to: %s"), *GetName());
     }
 }
 
 void ACYPlayerCharacter::GrantDefaultAbilities()
 {
-    if (!AbilitySystemComponent || !HasAuthority()) return;
+    if (!AbilitySystemComponent || !HasAuthority() || bAbilitiesGranted) return;
+
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Granting %d default abilities to: %s"), DefaultAbilities.Num(), *GetName());
 
     for (int32 i = 0; i < DefaultAbilities.Num(); ++i)
     {
         TSubclassOf<UGameplayAbility>& AbilityClass = DefaultAbilities[i];
         if (AbilityClass)
         {
+            // ✅ 중복 등록 방지 - 해당 태그의 어빌리티가 이미 있는지 체크
+            FGameplayTag AbilityTag;
+            
+            // 어빌리티 클래스에 따라 태그 결정
+            if (AbilityClass == UGA_WeaponAttack::StaticClass())
+            {
+                AbilityTag = FGameplayTag::RequestGameplayTag("Ability.Weapon.Attack");
+            }
+            else if (AbilityClass == UGA_PlaceTrap::StaticClass())
+            {
+                AbilityTag = FGameplayTag::RequestGameplayTag("Ability.Trap.Place");
+            }
+            
+            // 해당 태그의 어빌리티가 이미 있는지 체크
+            if (AbilityTag.IsValid())
+            {
+                FGameplayTagContainer TagContainer;
+                TagContainer.AddTag(AbilityTag);
+                
+                TArray<FGameplayAbilitySpec*> ExistingAbilities;
+                AbilitySystemComponent->GetActivatableGameplayAbilitySpecsByAllMatchingTags(TagContainer, ExistingAbilities);
+                
+                if (ExistingAbilities.Num() > 0)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("⚠️ Ability already exists for tag: %s, skipping"), *AbilityTag.ToString());
+                    continue;
+                }
+            }
+            
             FGameplayAbilitySpec AbilitySpec(AbilityClass, 1, INDEX_NONE, this);
-            AbilitySystemComponent->GiveAbility(AbilitySpec);
+            FGameplayAbilitySpecHandle Handle = AbilitySystemComponent->GiveAbility(AbilitySpec);
+            
+            UE_LOG(LogTemp, Warning, TEXT("✅ Granted ability: %s (Tag: %s)"), 
+                   *AbilityClass->GetName(), 
+                   AbilityTag.IsValid() ? *AbilityTag.ToString() : TEXT("None"));
         }
     }
 }

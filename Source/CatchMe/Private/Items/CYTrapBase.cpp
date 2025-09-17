@@ -1,3 +1,4 @@
+// CYTrapBase.cpp - 네트워크 동기화 개선
 #include "Items/CYTrapBase.h"
 #include "Player/CYPlayerCharacter.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -22,6 +23,11 @@ ACYTrapBase::ACYTrapBase()
     ItemCount = 1;
     TrapType = ETrapType::Slow; // 기본값
     TrapState = ETrapState::MapPlaced; // ✅ 기본적으로 맵 배치 상태
+
+    // ✅ 네트워킹 설정 강화
+    bReplicates = true;
+    SetReplicateMovement(true);
+    bAlwaysRelevant = true; // 모든 클라이언트에게 항상 관련됨
 
     // 기본 메시 설정
     if (ItemMesh)
@@ -49,6 +55,7 @@ void ACYTrapBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACYTrapBase, TrapState);
+    DOREPLIFETIME(ACYTrapBase, bIsArmed); // ✅ Armed 상태도 리플리케이트
 }
 
 void ACYTrapBase::BeginPlay()
@@ -86,11 +93,14 @@ void ACYTrapBase::SetupTrapForCurrentState()
         // ✅ 오브젝트 타입을 WorldDynamic으로 설정 (SphereOverlapActors가 찾을 수 있도록)
         InteractionSphere->SetCollisionObjectType(ECC_WorldDynamic);
         
-        // ✅ 기존 바인딩 클리어 후 새로 바인딩
-        InteractionSphere->OnComponentBeginOverlap.Clear();
-        InteractionSphere->OnComponentEndOverlap.Clear();
-        InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnPickupSphereOverlap);
-        InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &ACYTrapBase::OnPickupSphereEndOverlap);
+        // ✅ 서버에서만 픽업 바인딩
+        if (HasAuthority())
+        {
+            InteractionSphere->OnComponentBeginOverlap.Clear();
+            InteractionSphere->OnComponentEndOverlap.Clear();
+            InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnPickupSphereOverlap);
+            InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &ACYTrapBase::OnPickupSphereEndOverlap);
+        }
         
         UE_LOG(LogTemp, Warning, TEXT("🎯 Trap set as PICKUPABLE: %s (Radius: %f)"), 
                *ItemName.ToString(), InteractionSphere->GetScaledSphereRadius());
@@ -122,6 +132,9 @@ void ACYTrapBase::ConvertToPlayerPlacedTrap(AActor* PlacingPlayer)
     
     // ✅ 상태에 맞게 재설정
     SetupTrapForCurrentState();
+    
+    // ✅ 클라이언트에게 강제 업데이트
+    ForceNetUpdate();
     
     UE_LOG(LogTemp, Warning, TEXT("🎯 Trap converted to PlayerPlaced by %s"), 
            PlacingPlayer ? *PlacingPlayer->GetName() : TEXT("Unknown"));
@@ -163,6 +176,9 @@ void ACYTrapBase::ArmTrap()
         InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnTriggerSphereOverlap);
     }
 
+    // ✅ 클라이언트에게 Armed 상태 전파
+    ForceNetUpdate();
+    
     // 트랩 활성화 이벤트
     OnTrapArmed();
 
@@ -196,8 +212,21 @@ void ACYTrapBase::OnTriggerSphereOverlap(UPrimitiveComponent* OverlappedComponen
     // 효과 적용
     ApplyTrapEffects(Target);
     
+    // ✅ 멀티캐스트 RPC로 모든 클라이언트에게 트리거 알림
+    MulticastOnTrapTriggered(Target);
+    
     // 트랩 파괴
     Destroy();
+}
+
+// ✅ 새로운 멀티캐스트 함수
+void ACYTrapBase::MulticastOnTrapTriggered_Implementation(ACYPlayerCharacter* Target)
+{
+    if (!HasAuthority()) // 클라이언트에서만 실행
+    {
+        OnTrapTriggered(Target);
+        SetupTrapVisuals(); // 트리거 시각 효과
+    }
 }
 
 // ✅ 픽업용 래퍼 함수들 (부모 클래스의 protected 함수 호출)

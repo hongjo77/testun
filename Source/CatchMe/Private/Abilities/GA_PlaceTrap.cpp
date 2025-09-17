@@ -1,4 +1,5 @@
-﻿#include "Abilities/GA_PlaceTrap.h"
+﻿// GA_PlaceTrap.cpp - SourceObject 문제 해결
+#include "Abilities/GA_PlaceTrap.h"
 #include "Items/CYTrapFactory.h"
 #include "Items/CYItemBase.h"
 #include "Engine/World.h"
@@ -7,11 +8,12 @@
 #include "Camera/CameraComponent.h"
 #include "Components/CYWeaponComponent.h"
 #include "Items/CYTrapBase.h"
+#include "Components/CYInventoryComponent.h"
 
 UGA_PlaceTrap::UGA_PlaceTrap()
 {
     InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
-    NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
+    NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerInitiated; // ✅ 서버에서만 실행
 
     // ✅ 하드코딩된 태그 사용
     FGameplayTag PlaceTrapTag = FGameplayTag::RequestGameplayTag(FName("Ability.Trap.Place"));
@@ -63,19 +65,12 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
         return;
     }
 
-    // ✅ AbilitySpec에서만 SourceObject 획득 (단순화)
-    ACYItemBase* SourceItem = nullptr;
-    const FGameplayAbilitySpec* CurrentSpec = GetCurrentAbilitySpec();
-    if (CurrentSpec && CurrentSpec->SourceObject.IsValid())
-    {
-        SourceItem = Cast<ACYItemBase>(CurrentSpec->SourceObject.Get());
-        UE_LOG(LogTemp, Warning, TEXT("🚀 GA_PlaceTrap: SourceItem from spec: %s"), 
-               SourceItem ? *SourceItem->ItemName.ToString() : TEXT("NULL"));
-    }
-
+    // ✅ 새로운 방식: 인벤토리에서 직접 아이템 가져오기
+    ACYItemBase* SourceItem = FindValidTrapItemInInventory(OwnerActor);
+    
     if (!SourceItem)
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ GA_PlaceTrap: No valid source item found in AbilitySpec"));
+        UE_LOG(LogTemp, Error, TEXT("❌ GA_PlaceTrap: No valid trap item found in inventory"));
         EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
         return;
     }
@@ -103,6 +98,9 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     {
         UE_LOG(LogTemp, Warning, TEXT("✅ Trap successfully created: %s"), 
                *NewTrap->GetClass()->GetName());
+        
+        // ✅ 트랩 설치 후 아이템 소모 처리
+        ConsumeItemFromInventory(OwnerActor, SourceItem);
     }
     else
     {
@@ -114,6 +112,71 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
     ApplyCooldown(Handle, ActorInfo, ActivationInfo);
     UE_LOG(LogTemp, Warning, TEXT("🚀 GA_PlaceTrap: Ability completed"));
     EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+}
+
+ACYItemBase* UGA_PlaceTrap::FindValidTrapItemInInventory(AActor* OwnerActor)
+{
+    if (!OwnerActor) return nullptr;
+
+    UCYInventoryComponent* InventoryComp = OwnerActor->FindComponentByClass<UCYInventoryComponent>();
+    if (!InventoryComp) return nullptr;
+
+    // 아이템 슬롯에서 트랩 아이템 찾기
+    for (ACYItemBase* Item : InventoryComp->ItemSlots)
+    {
+        if (Item && Item->ItemTag.MatchesTag(FGameplayTag::RequestGameplayTag("Item.Trap")) && Item->ItemCount > 0)
+        {
+            return Item;
+        }
+    }
+
+    return nullptr;
+}
+
+void UGA_PlaceTrap::ConsumeItemFromInventory(AActor* OwnerActor, ACYItemBase* SourceItem)
+{
+    if (!OwnerActor || !SourceItem) return;
+
+    UCYInventoryComponent* InventoryComp = OwnerActor->FindComponentByClass<UCYInventoryComponent>();
+    if (!InventoryComp) return;
+
+    // 아이템 수량 감소
+    SourceItem->ItemCount--;
+    
+    if (SourceItem->ItemCount <= 0)
+    {
+        // 아이템이 모두 소모되면 슬롯에서 제거
+        for (int32 i = 0; i < InventoryComp->ItemSlots.Num(); ++i)
+        {
+            if (InventoryComp->ItemSlots[i] == SourceItem)
+            {
+                InventoryComp->ItemSlots[i] = nullptr;
+                
+                // 이벤트 발생
+                int32 UnifiedIndex = i; // ItemSlot은 0부터 시작
+                InventoryComp->OnInventoryChanged.Broadcast(UnifiedIndex, nullptr);
+                
+                SourceItem->Destroy();
+                break;
+            }
+        }
+    }
+    else
+    {
+        // 수량만 감소한 경우 이벤트 발생
+        for (int32 i = 0; i < InventoryComp->ItemSlots.Num(); ++i)
+        {
+            if (InventoryComp->ItemSlots[i] == SourceItem)
+            {
+                int32 UnifiedIndex = i;
+                InventoryComp->OnInventoryChanged.Broadcast(UnifiedIndex, SourceItem);
+                break;
+            }
+        }
+    }
+    
+    UE_LOG(LogTemp, Warning, TEXT("🔧 Consumed trap item: %s (Remaining: %d)"), 
+           *SourceItem->ItemName.ToString(), SourceItem->ItemCount);
 }
 
 FVector UGA_PlaceTrap::CalculateSpawnLocation(AActor* OwnerActor)

@@ -1,4 +1,4 @@
-// CYPlayerController.cpp - UseInventorySlot 함수 제거 및 정리
+// CYPlayerController.cpp - 입력 중복 방지
 #include "Player/CYPlayerController.h"
 #include "Player/CYPlayerCharacter.h"
 #include "EnhancedInputComponent.h"
@@ -9,10 +9,16 @@
 #include "Items/CYItemBase.h"
 #include "Items/CYWeaponBase.h"
 #include "CYInventoryTypes.h"
+#include "Engine/World.h"
 
 ACYPlayerController::ACYPlayerController()
 {
     bReplicates = true;
+    
+    // ✅ 입력 중복 방지 플래그들
+    bIsAttacking = false;
+    bIsUsingItem = false;
+    InputCooldownTime = 0.1f; // 100ms 쿨다운
 }
 
 void ACYPlayerController::BeginPlay()
@@ -35,14 +41,12 @@ void ACYPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
 
-    // ✅ Enhanced Input 우선 시도
     bool bUsingEnhancedInput = false;
     
     if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(InputComponent))
     {
         UE_LOG(LogTemp, Warning, TEXT("✅ Using Enhanced Input"));
         
-        // Enhanced Input으로만 바인딩
         if (InteractAction)
         {
             EnhancedInput->BindAction(InteractAction, ETriggerEvent::Started, this, &ACYPlayerController::InteractPressed);
@@ -69,7 +73,6 @@ void ACYPlayerController::SetupInputComponent()
             bUsingEnhancedInput = true;
         }
         
-        // 나머지 Enhanced Input 바인딩들
         if (MoveAction)
             EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACYPlayerController::Move);
         if (LookAction)
@@ -81,7 +84,6 @@ void ACYPlayerController::SetupInputComponent()
         }
     }
     
-    // ✅ Enhanced Input이 제대로 안 되면 Legacy Input 사용
     if (!bUsingEnhancedInput && InputComponent)
     {
         UE_LOG(LogTemp, Warning, TEXT("⚠️ Falling back to Legacy Input"));
@@ -136,6 +138,13 @@ void ACYPlayerController::InteractPressed()
 
 void ACYPlayerController::PrimaryAttackPressed()
 {
+    // ✅ 공격 중복 방지
+    if (bIsAttacking)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("🗡️ Attack already in progress, ignoring"));
+        return;
+    }
+
     ServerDisplayInventory();
 
     if (IsLocalController())
@@ -146,7 +155,14 @@ void ACYPlayerController::PrimaryAttackPressed()
     ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn());
     if (PlayerCharacter && PlayerCharacter->WeaponComponent && PlayerCharacter->WeaponComponent->CurrentWeapon)
     {
+        bIsAttacking = true;
         ServerAttackPressed();
+        
+        // ✅ 쿨다운 타이머 설정
+        GetWorld()->GetTimerManager().SetTimer(AttackCooldownTimer, [this]()
+        {
+            bIsAttacking = false;
+        }, InputCooldownTime, false);
     }
 }
 
@@ -172,6 +188,13 @@ void ACYPlayerController::UseInventorySlot9() { UseInventorySlotByKey(9); }
 
 void ACYPlayerController::UseInventorySlotByKey(int32 KeyNumber)
 {
+    // ✅ 아이템 사용 중복 방지
+    if (bIsUsingItem)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("📦 Item use already in progress, ignoring"));
+        return;
+    }
+
     if (ACYPlayerCharacter* PlayerCharacter = Cast<ACYPlayerCharacter>(GetPawn()))
     {
         if (!PlayerCharacter->InventoryComponent) return;
@@ -179,7 +202,14 @@ void ACYPlayerController::UseInventorySlotByKey(int32 KeyNumber)
         int32 SlotIndex = UInventorySlotUtils::KeyToSlotIndex(KeyNumber);
         if (SlotIndex >= 0)
         {
+            bIsUsingItem = true;
             PlayerCharacter->UseInventorySlot(SlotIndex);
+            
+            // ✅ 쿨다운 타이머 설정
+            GetWorld()->GetTimerManager().SetTimer(ItemUseCooldownTimer, [this]()
+            {
+                bIsUsingItem = false;
+            }, InputCooldownTime, false);
         }
     }
 }

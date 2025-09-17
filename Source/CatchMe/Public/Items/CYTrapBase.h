@@ -1,3 +1,4 @@
+// CYTrapBase.h - 멀티캐스트 함수 선언 추가
 #pragma once
 
 #include "CoreMinimal.h"
@@ -29,6 +30,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trap State", Replicated)
     ETrapState TrapState = ETrapState::MapPlaced;
 
+    // ✅ Armed 상태도 리플리케이트
+    UPROPERTY(BlueprintReadOnly, Category = "Trap State", Replicated)
+    bool bIsArmed = false;
+
     // ✅ 플레이어가 설치한 트랩으로 전환하는 함수
     UFUNCTION(BlueprintCallable, Category = "Trap")
     void ConvertToPlayerPlacedTrap(AActor* PlacingPlayer);
@@ -51,10 +56,6 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Trap Settings")
     float TrapLifetime = 60.0f;
 
-    // 현재 상태
-    UPROPERTY(BlueprintReadOnly, Category = "Trap State")
-    bool bIsArmed = false;
-
     // 가상 함수들 - 하위 클래스에서 구현
     UFUNCTION(BlueprintNativeEvent, Category = "Trap Events")
     void OnTrapSpawned();
@@ -71,6 +72,10 @@ public:
     UFUNCTION(BlueprintNativeEvent, Category = "Trap Events")
     void OnTrapDestroyed();
     virtual void OnTrapDestroyed_Implementation();
+
+    // ✅ 새로운 멀티캐스트 함수 - 클라이언트 동기화용
+    UFUNCTION(NetMulticast, Reliable, Category = "Trap Events")
+    void MulticastOnTrapTriggered(ACYPlayerCharacter* Target);
 
     // 트랩 효과 적용 (템플릿 메서드 패턴)
     UFUNCTION(BlueprintCallable, Category = "Trap")

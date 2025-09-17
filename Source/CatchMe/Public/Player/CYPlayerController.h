@@ -1,3 +1,4 @@
+// CYPlayerController.h - 입력 중복 방지 플래그 추가
 #pragma once
 
 #include "CoreMinimal.h"
@@ -22,51 +23,65 @@ protected:
     virtual void SetupInputComponent() override;
 
     // Enhanced Input 설정
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputMappingContext* DefaultMappingContext;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* MoveAction;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* LookAction;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* JumpAction;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* InteractAction;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* PrimaryAttackAction;
 
     // 인벤토리 입력 액션들
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* UseItem1Action;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* UseItem2Action;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* UseItem3Action;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* UseItem4Action;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* UseItem5Action;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* UseItem6Action;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* UseItem7Action;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* UseItem8Action;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* UseItem9Action;
+
+    // ✅ 입력 중복 방지 플래그들
+    UPROPERTY(BlueprintReadOnly, Category = "Input")
+    bool bIsAttacking = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Input")
+    bool bIsUsingItem = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
+    float InputCooldownTime = 0.1f;
+
+    // ✅ 타이머 핸들들
+    FTimerHandle AttackCooldownTimer;
+    FTimerHandle ItemUseCooldownTimer;
 
     // 입력 콜백 함수들
     void Move(const struct FInputActionValue& Value);

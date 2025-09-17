@@ -1,11 +1,12 @@
-﻿#include "Components/CYInventoryComponent.h"
+﻿// CYInventoryComponent.cpp - 중복 실행 방지 및 단순화
+#include "Components/CYInventoryComponent.h"
 #include "Items/CYItemBase.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
 #include "CYGameplayTags.h"
 #include "Components/CYWeaponComponent.h"
 #include "Items/CYWeaponBase.h"
-#include "CYInventoryTypes.h" // ✅ 새로운 타입 시스템
+#include "CYInventoryTypes.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -14,6 +15,9 @@ UCYInventoryComponent::UCYInventoryComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
     SetIsReplicatedByDefault(true);
+    
+    // ✅ 중복 사용 방지
+    bIsProcessingUse = false;
 }
 
 void UCYInventoryComponent::BeginPlay()
@@ -29,6 +33,7 @@ void UCYInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(UCYInventoryComponent, WeaponSlots);
     DOREPLIFETIME(UCYInventoryComponent, ItemSlots);
+    DOREPLIFETIME(UCYInventoryComponent, bIsProcessingUse); // ✅ 처리 상태 동기화
 }
 
 bool UCYInventoryComponent::AddItem(ACYItemBase* Item, int32 SlotIndex)
@@ -50,7 +55,6 @@ bool UCYInventoryComponent::AddItem(ACYItemBase* Item, int32 SlotIndex)
 
 bool UCYInventoryComponent::RemoveItem(int32 SlotIndex)
 {
-    // ✅ 개선된 시스템: 타입 안전한 슬롯 파싱
     EInventorySlotType SlotType;
     int32 LocalIndex;
     
@@ -74,7 +78,6 @@ bool UCYInventoryComponent::RemoveItem(int32 SlotIndex)
 
 ACYItemBase* UCYInventoryComponent::GetItem(int32 SlotIndex) const
 {
-    // ✅ 개선된 시스템: 타입 안전한 슬롯 파싱
     EInventorySlotType SlotType;
     int32 LocalIndex;
     
@@ -107,12 +110,22 @@ bool UCYInventoryComponent::UseItem(int32 SlotIndex)
 {
     UE_LOG(LogTemp, Warning, TEXT("📦 UCYInventoryComponent::UseItem called with SlotIndex: %d"), SlotIndex);
 
+    // ✅ 중복 사용 방지
+    if (bIsProcessingUse)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("📦 Already processing item use, ignoring"));
+        return false;
+    }
+
     if (!GetOwner()->HasAuthority()) 
     {
         UE_LOG(LogTemp, Warning, TEXT("📦 Not authority, calling ServerUseItem"));
         ServerUseItem(SlotIndex);
-        return false; // ✅ 여기서 리턴해서 중복 실행 방지
+        return false;
     }
+
+    // ✅ 처리 시작 플래그 설정
+    bIsProcessingUse = true;
 
     ACYItemBase* Item = GetItem(SlotIndex);
     UE_LOG(LogTemp, Warning, TEXT("📦 GetItem result: %s"), Item ? *Item->ItemName.ToString() : TEXT("NULL"));
@@ -120,10 +133,10 @@ bool UCYInventoryComponent::UseItem(int32 SlotIndex)
     if (!Item) 
     {
         UE_LOG(LogTemp, Error, TEXT("❌ No item found at SlotIndex: %d"), SlotIndex);
+        bIsProcessingUse = false;
         return false;
     }
 
-    // ✅ 개선된 시스템으로 슬롯 타입 확인
     EInventorySlotType SlotType;
     int32 LocalIndex;
     UInventorySlotUtils::ParseSlotIndex(SlotIndex, SlotType, LocalIndex);
@@ -131,16 +144,80 @@ bool UCYInventoryComponent::UseItem(int32 SlotIndex)
     UE_LOG(LogTemp, Warning, TEXT("📦 SlotType: %s, LocalIndex: %d"), 
            SlotType == EInventorySlotType::Weapon ? TEXT("Weapon") : TEXT("Item"), LocalIndex);
 
+    bool bResult = false;
+
     // 무기 장착
     if (SlotType == EInventorySlotType::Weapon)
     {
         UE_LOG(LogTemp, Warning, TEXT("📦 Trying to equip weapon"));
-        return EquipWeaponFromSlot(Item);
+        bResult = EquipWeaponFromSlot(Item);
+    }
+    else
+    {
+        // ✅ 트랩 아이템 사용 - 직접 GA_PlaceTrap 실행
+        FGameplayTag TrapTag = FGameplayTag::RequestGameplayTag("Item.Trap");
+        if (Item->ItemTag.MatchesTag(TrapTag))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("📦 Trying to use trap item: %s"), *Item->ItemName.ToString());
+            bResult = UseTrapItemDirect(Item, LocalIndex);
+        }
+        else
+        {
+            // 일반 아이템 사용
+            UE_LOG(LogTemp, Warning, TEXT("📦 Trying to activate item ability for: %s"), *Item->ItemName.ToString());
+            bResult = ActivateItemAbility(Item, LocalIndex);
+        }
     }
 
-    // 일반 아이템 사용
-    UE_LOG(LogTemp, Warning, TEXT("📦 Trying to activate item ability for: %s"), *Item->ItemName.ToString());
-    return ActivateItemAbility(Item, LocalIndex);
+    // ✅ 처리 완료 후 플래그 해제
+    GetWorld()->GetTimerManager().SetTimerForNextTick([this]()
+    {
+        bIsProcessingUse = false;
+    });
+
+    return bResult;
+}
+
+bool UCYInventoryComponent::UseTrapItemDirect(ACYItemBase* Item, int32 LocalIndex)
+{
+    if (!Item) return false;
+
+    UAbilitySystemComponent* ASC = GetOwnerASC();
+    if (!ASC) 
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ No AbilitySystemComponent found"));
+        return false;
+    }
+
+    UCYAbilitySystemComponent* CyASC = Cast<UCYAbilitySystemComponent>(ASC);
+    if (!CyASC)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ ASC is not UCYAbilitySystemComponent"));
+        return false;
+    }
+
+    // ✅ 트랩 배치 어빌리티 한 번만 실행
+    FGameplayTag TrapPlaceTag = FGameplayTag::RequestGameplayTag("Ability.Trap.Place");
+    
+    // ✅ 쿨다운 체크
+    FGameplayTagContainer CooldownTags;
+    CooldownTags.AddTag(FGameplayTag::RequestGameplayTag("Cooldown.Trap.Place"));
+    if (CyASC->HasAnyMatchingGameplayTags(CooldownTags))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⏰ Trap placement on cooldown"));
+        return false;
+    }
+
+    bool bSuccess = CyASC->TryActivateAbilityByTag(TrapPlaceTag);
+    
+    UE_LOG(LogTemp, Warning, TEXT("🎯 TrapPlace ability result: %s"), bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
+    
+    if (bSuccess)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("⚡ Trap placement initiated successfully"));
+    }
+    
+    return bSuccess;
 }
 
 void UCYInventoryComponent::ServerUseItem_Implementation(int32 SlotIndex)
@@ -161,11 +238,9 @@ bool UCYInventoryComponent::AddWeapon(ACYItemBase* Weapon)
 
     WeaponSlots[EmptySlot] = Weapon;
     
-    // ✅ 개선된 시스템으로 이벤트 발생
     int32 UnifiedIndex = UInventorySlotUtils::MakeSlotIndex(EInventorySlotType::Weapon, EmptySlot);
     OnInventoryChanged.Broadcast(UnifiedIndex, Weapon);
     
-    // 첫 번째 무기 자동 장착
     AutoEquipFirstWeapon(Cast<ACYWeaponBase>(Weapon));
     
     return true;
@@ -175,19 +250,16 @@ bool UCYInventoryComponent::AddItemWithStacking(ACYItemBase* Item)
 {
     if (!Item) return false;
 
-    // 1. 기존 스택에 추가 시도
     if (TryStackWithExistingItem(Item))
     {
         return true;
     }
 
-    // 2. 새 슬롯에 추가
     int32 EmptySlot = FindEmptyItemSlot();
     if (EmptySlot == -1) return false;
 
     ItemSlots[EmptySlot] = Item;
     
-    // ✅ 개선된 시스템으로 이벤트 발생
     int32 UnifiedIndex = UInventorySlotUtils::MakeSlotIndex(EInventorySlotType::Item, EmptySlot);
     OnInventoryChanged.Broadcast(UnifiedIndex, Item);
     
@@ -240,11 +312,9 @@ bool UCYInventoryComponent::TryStackWithExistingItem(ACYItemBase* Item)
     ExistingItem->ItemCount += AddableCount;
     Item->ItemCount -= AddableCount;
     
-    // ✅ 개선된 시스템으로 이벤트 발생
     int32 UnifiedIndex = UInventorySlotUtils::MakeSlotIndex(EInventorySlotType::Item, StackableSlot);
     OnInventoryChanged.Broadcast(UnifiedIndex, ExistingItem);
     
-    // 아이템이 모두 스택되면 원본 제거
     if (Item->ItemCount <= 0)
     {
         Item->Destroy();
@@ -287,7 +357,6 @@ bool UCYInventoryComponent::ActivateItemAbility(ACYItemBase* Item, int32 SlotInd
         return false;
     }
 
-    // ✅ UCYAbilitySystemComponent로 캐스팅
     UCYAbilitySystemComponent* CyASC = Cast<UCYAbilitySystemComponent>(ASC);
     if (!CyASC)
     {
@@ -303,20 +372,17 @@ bool UCYInventoryComponent::ActivateItemAbility(ACYItemBase* Item, int32 SlotInd
 
     UE_LOG(LogTemp, Warning, TEXT("⚡ Looking for ability: %s"), *Item->ItemAbility->GetName());
 
-    // ✅ 새로운 단순화된 함수 사용 - SourceObject 직접 전달
-    FGameplayTag AbilityTag = FGameplayTag::RequestGameplayTag("Ability.Trap.Place");
-    bool bSuccess = CyASC->TryActivateAbilityByTagWithSource(AbilityTag, Item);
+    FGameplayTag AbilityTag = FGameplayTag::RequestGameplayTag("Event.Item.Use");
+    bool bSuccess = CyASC->TryActivateAbilityByTag(AbilityTag);
     
-    UE_LOG(LogTemp, Warning, TEXT("⚡ TryActivateAbilityByTagWithSource result: %s"), bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
+    UE_LOG(LogTemp, Warning, TEXT("⚡ Item ability result: %s"), bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
     
     if (bSuccess)
     {
-        UE_LOG(LogTemp, Warning, TEXT("⚡ Ability activated successfully"));
+        UE_LOG(LogTemp, Warning, TEXT("⚡ Item ability activated successfully"));
         
-        // ✅ 소모성 아이템 처리
         FGameplayTag ConsumableTag = FGameplayTag::RequestGameplayTag("Item.Consumable");
-        FGameplayTag TrapTag = FGameplayTag::RequestGameplayTag("Item.Trap");
-        if (Item->ItemTag.MatchesTag(ConsumableTag) || Item->ItemTag.MatchesTag(TrapTag))
+        if (Item->ItemTag.MatchesTag(ConsumableTag))
         {
             ProcessItemConsumption(Item, SlotIndex);
         }
@@ -337,14 +403,12 @@ void UCYInventoryComponent::ProcessItemConsumption(ACYItemBase* Item, int32 Slot
         {
             ItemSlots[SlotIndex] = nullptr;
             
-            // ✅ 개선된 시스템으로 이벤트 발생
             int32 UnifiedIndex = UInventorySlotUtils::MakeSlotIndex(EInventorySlotType::Item, SlotIndex);
             OnInventoryChanged.Broadcast(UnifiedIndex, nullptr);
             Item->Destroy();
         }
         else
         {
-            // ✅ 개선된 시스템으로 이벤트 발생
             int32 UnifiedIndex = UInventorySlotUtils::MakeSlotIndex(EInventorySlotType::Item, SlotIndex);
             OnInventoryChanged.Broadcast(UnifiedIndex, Item);
         }
@@ -357,7 +421,6 @@ bool UCYInventoryComponent::RemoveWeaponFromSlot(int32 WeaponIndex)
     {
         WeaponSlots[WeaponIndex] = nullptr;
         
-        // ✅ 개선된 시스템으로 이벤트 발생
         int32 UnifiedIndex = UInventorySlotUtils::MakeSlotIndex(EInventorySlotType::Weapon, WeaponIndex);
         OnInventoryChanged.Broadcast(UnifiedIndex, nullptr);
         return true;
@@ -371,7 +434,6 @@ bool UCYInventoryComponent::RemoveItemFromSlot(int32 ItemIndex)
     {
         ItemSlots[ItemIndex] = nullptr;
         
-        // ✅ 개선된 시스템으로 이벤트 발생
         int32 UnifiedIndex = UInventorySlotUtils::MakeSlotIndex(EInventorySlotType::Item, ItemIndex);
         OnInventoryChanged.Broadcast(UnifiedIndex, nullptr);
         return true;
@@ -383,7 +445,6 @@ void UCYInventoryComponent::OnRep_WeaponSlots()
 {
     for (int32 i = 0; i < WeaponSlots.Num(); ++i)
     {
-        // ✅ 개선된 시스템으로 이벤트 발생
         int32 UnifiedIndex = UInventorySlotUtils::MakeSlotIndex(EInventorySlotType::Weapon, i);
         OnInventoryChanged.Broadcast(UnifiedIndex, WeaponSlots[i]);
     }
@@ -393,7 +454,6 @@ void UCYInventoryComponent::OnRep_ItemSlots()
 {
     for (int32 i = 0; i < ItemSlots.Num(); ++i)
     {
-        // ✅ 개선된 시스템으로 이벤트 발생
         int32 UnifiedIndex = UInventorySlotUtils::MakeSlotIndex(EInventorySlotType::Item, i);
         OnInventoryChanged.Broadcast(UnifiedIndex, ItemSlots[i]);
     }

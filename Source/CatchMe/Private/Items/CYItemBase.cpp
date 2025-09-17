@@ -1,5 +1,5 @@
+// CYItemBase.cpp - 어빌리티 중복 등록 방지
 #include "Items/CYItemBase.h"
-
 #include "CYGameplayTags.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -7,7 +7,7 @@
 #include "GAS/CYAbilitySystemComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/Engine.h"
-#include "Items/CYWeaponBase.h"  // Cast 체크용
+#include "Items/CYWeaponBase.h"
 
 ACYItemBase::ACYItemBase()
 {
@@ -103,11 +103,20 @@ void ACYItemBase::OnPickup(ACYPlayerCharacter* Character)
     UCYAbilitySystemComponent* ASC = Cast<UCYAbilitySystemComponent>(Character->GetAbilitySystemComponent());
     if (!ASC) return;
 
-    // Grant item ability
-    if (ItemAbility)
+    // ✅ 어빌리티 중복 등록 방지 - 트랩 아이템은 어빌리티를 등록하지 않음
+    FGameplayTag TrapTag = FGameplayTag::RequestGameplayTag("Item.Trap");
+    if (!ItemTag.MatchesTag(TrapTag) && ItemAbility && !ItemAbilityHandle.IsValid())
     {
         ItemAbilityHandle = ASC->GiveItemAbility(ItemAbility, 1);
         UE_LOG(LogTemp, Warning, TEXT("Granted ability for item: %s"), *ItemName.ToString());
+    }
+    else if (ItemTag.MatchesTag(TrapTag))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Trap item picked up: %s (No ability granted - using central trap ability)"), *ItemName.ToString());
+    }
+    else if (ItemAbilityHandle.IsValid())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Ability already granted for item: %s"), *ItemName.ToString());
     }
 
     // Apply item effects

@@ -1,8 +1,9 @@
-﻿#pragma once
+﻿// CYInventoryComponent.h - 중복 방지 플래그 추가
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "GAS/CYAbilitySystemComponent.h"  // ✅ Cast를 위해 추가
+#include "GAS/CYAbilitySystemComponent.h"
 #include "CYInventoryComponent.generated.h"
 
 class ACYItemBase;
@@ -58,6 +59,10 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	// ✅ 중복 사용 방지 플래그
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Inventory")
+	bool bIsProcessingUse = false;
+
 	// 리플리케이션 응답
 	UFUNCTION()
 	void OnRep_WeaponSlots();
@@ -79,6 +84,11 @@ protected:
 	// 아이템 사용 관련
 	bool EquipWeaponFromSlot(ACYItemBase* Item);
 	bool ActivateItemAbility(ACYItemBase* Item, int32 SlotIndex);
+	
+	// ✅ 트랩 아이템 전용 사용 로직 - 직접 실행
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool UseTrapItemDirect(ACYItemBase* Item, int32 LocalIndex);
+	
 	void ProcessItemConsumption(ACYItemBase* Item, int32 SlotIndex);
 
 	// 제거 관련

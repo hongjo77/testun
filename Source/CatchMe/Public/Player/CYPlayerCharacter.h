@@ -1,3 +1,4 @@
+// CYPlayerCharacter.h - 중복 방지 플래그 추가
 #pragma once
 
 #include "CoreMinimal.h"
@@ -79,4 +80,8 @@ protected:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GAS")
     TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities;
+
+    // ✅ 어빌리티 중복 등록 방지 플래그
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "GAS")
+    bool bAbilitiesGranted = false;
 };

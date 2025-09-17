@@ -1,4 +1,5 @@
-﻿#include "Components/CYWeaponComponent.h"
+﻿// CYWeaponComponent.cpp - GameplayTags 중복 초기화 문제 해결
+#include "Components/CYWeaponComponent.h"
 #include "Items/CYWeaponBase.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
@@ -99,20 +100,20 @@ bool UCYWeaponComponent::ExecuteWeaponAttack()
         return false;
     }
 
-    // ✅ 안전한 태그 초기화 (한 번만)
-    FCYGameplayTags::InitializeNativeTags();
+    // ✅ GameplayTags 초기화 제거 - 한 번만 초기화되도록 함
+    // FCYGameplayTags::InitializeNativeTags(); // 이 줄 제거!
     
-    // ✅ 하드코딩된 태그 사용 (백업)
+    // ✅ 안전한 태그 가져오기
     FGameplayTag WeaponAttackTag = FGameplayTag::RequestGameplayTag(FName("Ability.Weapon.Attack"));
     
-    UE_LOG(LogTemp, Warning, TEXT("🗡️ Using tag: %s"), *WeaponAttackTag.ToString());
-    
-    // ✅ 태그가 유효한지 확인
+    // ✅ 태그 유효성 검사 강화
     if (!WeaponAttackTag.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ Weapon attack tag is invalid!"));
+        UE_LOG(LogTemp, Error, TEXT("❌ Weapon attack tag is invalid! Tag: %s"), *WeaponAttackTag.ToString());
         return false;
     }
+    
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ Using tag: %s"), *WeaponAttackTag.ToString());
     
     FGameplayTagContainer TagContainer;
     TagContainer.AddTag(WeaponAttackTag);
