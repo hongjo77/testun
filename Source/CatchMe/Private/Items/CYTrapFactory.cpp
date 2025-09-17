@@ -1,4 +1,5 @@
-﻿#include "Items/CYTrapFactory.h"
+﻿// CYTrapFactory.cpp - 개선된 팩토리 시스템
+#include "Items/CYTrapFactory.h"
 #include "Items/CYTrapBase.h"
 #include "Items/CYSlowTrap.h"
 #include "Items/CYFreezeTrap.h"
@@ -46,7 +47,7 @@ ACYTrapBase* UCYTrapFactory::CreateTrap(UWorld* World, ETrapType TrapType, const
     SpawnParams.Instigator = Instigator;
     SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-    // 트랩 생성
+    // ✅ 트랩 생성 및 즉시 시각적 초기화
     ACYTrapBase* NewTrap = World->SpawnActor<ACYTrapBase>(TrapClass, Location, Rotation, SpawnParams);
     
     if (NewTrap)
@@ -54,12 +55,13 @@ ACYTrapBase* UCYTrapFactory::CreateTrap(UWorld* World, ETrapType TrapType, const
         // ✅ 플레이어가 설치한 트랩으로 변환
         NewTrap->ConvertToPlayerPlacedTrap(Owner);
         
-        UE_LOG(LogTemp, Log, TEXT("✅ Created PLAYER PLACED trap of type %s at location %s"), 
-               *TrapClass->GetName(), *Location.ToString());
+        UE_LOG(LogTemp, Warning, TEXT("✅ Created PLAYER PLACED trap: %s at location %s"), 
+               *GetTrapTypeName(TrapType), *Location.ToString());
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ Failed to spawn trap of type %s"), *TrapClass->GetName());
+        UE_LOG(LogTemp, Error, TEXT("❌ Failed to spawn trap of type %s"), 
+               *GetTrapTypeName(TrapType));
     }
 
     return NewTrap;
@@ -78,8 +80,8 @@ ACYTrapBase* UCYTrapFactory::CreateTrapFromItem(UWorld* World, ACYItemBase* Sour
     // 아이템으로부터 트랩 타입 추론
     ETrapType TrapType = InferTrapTypeFromItem(SourceItem);
     
-    UE_LOG(LogTemp, Warning, TEXT("🎯 Creating PLAYER PLACED trap from item: %s -> TrapType: %d"), 
-           *SourceItem->ItemName.ToString(), static_cast<int32>(TrapType));
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Creating trap from item: %s -> %s"), 
+           *SourceItem->ItemName.ToString(), *GetTrapTypeName(TrapType));
 
     return CreateTrap(World, TrapType, Location, Rotation, Owner, Instigator);
 }
@@ -93,8 +95,8 @@ void UCYTrapFactory::RegisterTrapClass(ETrapType TrapType, TSubclassOf<ACYTrapBa
     }
 
     TrapClassMap.Add(TrapType, TrapClass);
-    UE_LOG(LogTemp, Log, TEXT("✅ Registered trap class %s for type %d"), 
-           *TrapClass->GetName(), static_cast<int32>(TrapType));
+    UE_LOG(LogTemp, Warning, TEXT("✅ Registered trap class %s for type %s"), 
+           *TrapClass->GetName(), *GetTrapTypeName(TrapType));
 }
 
 TArray<ETrapType> UCYTrapFactory::GetRegisteredTrapTypes()
@@ -115,41 +117,36 @@ ETrapType UCYTrapFactory::InferTrapTypeFromItem(ACYItemBase* Item)
     
     UE_LOG(LogTemp, Warning, TEXT("🏭 InferTrapTypeFromItem: '%s'"), *ItemName);
     
-    // ✅ TestTrap 특별 처리 - Freeze 타입으로 설정
-    if (ItemName.Contains(TEXT("test trap")) || ItemName.Equals(TEXT("test trap")))
+    // ✅ 개선된 추론 로직
+    if (ItemName.Contains(TEXT("freeze")) || ItemName.Contains(TEXT("frost")) || 
+        ItemName.Contains(TEXT("ice")) || ItemName.Contains(TEXT("프리즈")) || 
+        ItemName.Contains(TEXT("얼음")) || ItemName.Contains(TEXT("test trap")))
     {
-        UE_LOG(LogTemp, Warning, TEXT("🏭 Test Trap detected -> Freeze type"));
-        return ETrapType::Freeze;
-    }
-    // ✅ 기존 추론 로직
-    else if (ItemName.Contains(TEXT("slow")) || ItemName.Contains(TEXT("슬로우")))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("🏭 Slow Trap detected"));
-        return ETrapType::Slow;
-    }
-    else if (ItemName.Contains(TEXT("freeze")) || ItemName.Contains(TEXT("frost")) || 
-             ItemName.Contains(TEXT("ice")) || ItemName.Contains(TEXT("프리즈")) || 
-             ItemName.Contains(TEXT("얼음")))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("🏭 Freeze Trap detected"));
+        UE_LOG(LogTemp, Warning, TEXT("🏭 -> Freeze Trap"));
         return ETrapType::Freeze;
     }
     else if (ItemName.Contains(TEXT("damage")) || ItemName.Contains(TEXT("spike")) || 
              ItemName.Contains(TEXT("harm")) || ItemName.Contains(TEXT("데미지")) || 
-             ItemName.Contains(TEXT("가시")))
+             ItemName.Contains(TEXT("가시")) || ItemName.Contains(TEXT("hurt")))
     {
-        UE_LOG(LogTemp, Warning, TEXT("🏭 Damage Trap detected"));
+        UE_LOG(LogTemp, Warning, TEXT("🏭 -> Damage Trap"));
         return ETrapType::Damage;
+    }
+    else if (ItemName.Contains(TEXT("slow")) || ItemName.Contains(TEXT("슬로우")) ||
+             ItemName.Contains(TEXT("mud")) || ItemName.Contains(TEXT("늪")))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("🏭 -> Slow Trap"));
+        return ETrapType::Slow;
     }
     else if (ItemName.Contains(TEXT("explosion")) || ItemName.Contains(TEXT("bomb")) || 
              ItemName.Contains(TEXT("폭발")) || ItemName.Contains(TEXT("폭탄")))
     {
-        UE_LOG(LogTemp, Warning, TEXT("🏭 Explosion Trap detected"));
+        UE_LOG(LogTemp, Warning, TEXT("🏭 -> Explosion Trap (Not implemented yet)"));
         return ETrapType::Explosion;
     }
 
-    // ✅ 기본값 변경: TestTrap이 아니면 Slow
-    UE_LOG(LogTemp, Warning, TEXT("⚠️ Could not infer trap type from item name '%s', using Slow as default"), 
+    // ✅ 기본값: Slow Trap
+    UE_LOG(LogTemp, Warning, TEXT("⚠️ Could not infer trap type from '%s', using Slow as default"), 
            *ItemName);
     return ETrapType::Slow;
 }
@@ -161,9 +158,21 @@ TSubclassOf<ACYTrapBase> UCYTrapFactory::GetTrapClass(ETrapType TrapType)
         return *FoundClass;
     }
 
-    UE_LOG(LogTemp, Error, TEXT("UCYTrapFactory::GetTrapClass - No class found for trap type %d"), 
-           static_cast<int32>(TrapType));
+    UE_LOG(LogTemp, Error, TEXT("UCYTrapFactory::GetTrapClass - No class found for trap type %s"), 
+           *GetTrapTypeName(TrapType));
     return nullptr;
+}
+
+FString UCYTrapFactory::GetTrapTypeName(ETrapType TrapType)
+{
+    switch (TrapType)
+    {
+        case ETrapType::Slow: return TEXT("SlowTrap");
+        case ETrapType::Freeze: return TEXT("FreezeTrap");
+        case ETrapType::Damage: return TEXT("DamageTrap");
+        case ETrapType::Explosion: return TEXT("ExplosionTrap");
+        default: return TEXT("UnknownTrap");
+    }
 }
 
 void UCYTrapFactory::InitializeFactory()
@@ -175,7 +184,7 @@ void UCYTrapFactory::InitializeFactory()
 
     UE_LOG(LogTemp, Warning, TEXT("🏭 Initializing Trap Factory..."));
 
-    // 기본 트랩 클래스들 등록
+    // ✅ 기본 트랩 클래스들 등록
     RegisterTrapClass(ETrapType::Slow, ACYSlowTrap::StaticClass());
     RegisterTrapClass(ETrapType::Freeze, ACYFreezeTrap::StaticClass());
     RegisterTrapClass(ETrapType::Damage, ACYDamageTrap::StaticClass());
@@ -185,4 +194,12 @@ void UCYTrapFactory::InitializeFactory()
 
     bIsInitialized = true;
     UE_LOG(LogTemp, Warning, TEXT("✅ Trap Factory initialized with %d trap types"), TrapClassMap.Num());
+    
+    // ✅ 등록된 트랩들 로그 출력
+    for (const auto& TrapPair : TrapClassMap)
+    {
+        UE_LOG(LogTemp, Log, TEXT("   - %s: %s"), 
+               *GetTrapTypeName(TrapPair.Key), 
+               *TrapPair.Value->GetName());
+    }
 }

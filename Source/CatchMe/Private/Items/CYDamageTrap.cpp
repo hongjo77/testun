@@ -1,4 +1,5 @@
-﻿#include "Items/CYDamageTrap.h"
+﻿// CYDamageTrap.cpp - 고유 메쉬 및 효과 설정
+#include "Items/CYDamageTrap.h"
 #include "Player/CYPlayerCharacter.h"
 #include "GAS/CYGameplayEffects.h"
 #include "Components/StaticMeshComponent.h"
@@ -13,9 +14,6 @@ ACYDamageTrap::ACYDamageTrap()
     ItemDescription = FText::FromString("Deals direct damage to enemies");
     TrapType = ETrapType::Damage;
     
-    // ✅ 트랩 배치 어빌리티 설정
-    // ItemAbility = UGA_PlaceTrap::StaticClass(); // 블루프린트에서 설정하는 것이 더 안전
-    
     // 데미지 트랩 설정
     TriggerRadius = 90.0f;
     DamageAmount = 75.0f;
@@ -23,25 +21,33 @@ ACYDamageTrap::ACYDamageTrap()
     DamageOverTimeInterval = 1.0f;
     DamageOverTimeTicks = 3;
 
-    // 트랩 데이터 설정
+    // ✅ TrapData 완전 설정
     TrapData.TrapType = ETrapType::Damage;
     TrapData.TrapName = ItemName;
     TrapData.TrapDescription = ItemDescription;
     TrapData.TriggerRadius = TriggerRadius;
-    TrapData.TrapColor = FLinearColor::Red; // 빨간색으로 구분
+    TrapData.TrapColor = FLinearColor::Red; // 빨간색
+    
+    // ✅ 데미지 트랩 전용 메쉬/사운드/이펙트 (블루프린트에서 설정할 것)
+    // TrapData.TrapMesh = nullptr; // 블루프린트에서 설정
+    // TrapData.TriggerSound = nullptr; // 블루프린트에서 설정
+    // TrapData.TriggerEffect = nullptr; // 블루프린트에서 설정
 
     // 데미지 효과 설정
     TrapData.GameplayEffects.Empty();
-    TrapData.GameplayEffects.Add(UGE_WeaponDamage::StaticClass()); // 기존 데미지 효과 재사용
+    TrapData.GameplayEffects.Add(UGE_WeaponDamage::StaticClass());
 
-    // 시각적 설정
+    UE_LOG(LogTemp, Warning, TEXT("✅ DamageTrap constructor completed"));
+    
+    // ✅ 생성자에서 기본 메쉬 설정 (안전함)
     if (ItemMesh)
     {
-        static ConstructorHelpers::FObjectFinder<UStaticMesh> DamageTrapMesh(TEXT("/Engine/BasicShapes/Cylinder"));
+        static ConstructorHelpers::FObjectFinder<UStaticMesh> DamageTrapMesh(TEXT("/Engine/BasicShapes/Cone.Cone"));
         if (DamageTrapMesh.Succeeded())
         {
             ItemMesh->SetStaticMesh(DamageTrapMesh.Object);
-            ItemMesh->SetWorldScale3D(FVector(0.4f, 0.4f, 0.2f)); // 더 작고 높게
+            ItemMesh->SetWorldScale3D(FVector(0.5f, 0.5f, 0.8f));
+            UE_LOG(LogTemp, Warning, TEXT("🎨 DamageTrap: Set default cone mesh in constructor"));
         }
     }
 }
@@ -79,38 +85,75 @@ void ACYDamageTrap::OnTrapTriggered_Implementation(ACYPlayerCharacter* Target)
                           *Target->GetName(), 
                           DamageAmount));
     }
+    
+    // ✅ 데미지 트랩 전용 트리거 이펙트 재생
+    PlayDamageTriggerEffect();
 }
 
 void ACYDamageTrap::SetupTrapVisuals_Implementation()
 {
-    Super::SetupTrapVisuals_Implementation();
-    
-    // 데미지 트랩만의 추가 시각적 설정
+    UE_LOG(LogTemp, Warning, TEXT("🎨 DamageTrap::SetupTrapVisuals called"));
+
     if (ItemMesh)
     {
-        // 위험한 빨간색 머티리얼 적용
+        // ✅ TrapData에서 메쉬 사용 (블루프린트에서 설정된 것)
+        if (TrapData.TrapMesh)
+        {
+            ItemMesh->SetStaticMesh(TrapData.TrapMesh);
+            ItemMesh->SetWorldScale3D(FVector(0.5f, 0.5f, 0.8f)); // 커스텀 메쉬용 스케일
+            UE_LOG(LogTemp, Warning, TEXT("🎨 DamageTrap: Using TrapData mesh: %s"), *TrapData.TrapMesh->GetName());
+        }
+        else
+        {
+            // ✅ 생성자에서 설정된 메쉬 사용 (이미 안전하게 로드됨)
+            UE_LOG(LogTemp, Warning, TEXT("🎨 DamageTrap: Using constructor-set mesh"));
+        }
+        
+        // ✅ 데미지 트랩 전용 스케일 보장 (뾰족하고 위험해 보이게)
+        ItemMesh->SetWorldScale3D(FVector(0.5f, 0.5f, 0.8f));
+        
+        // ✅ 데미지 전용 머티리얼 설정 (빨간색, 금속성)
         UMaterialInterface* Material = ItemMesh->GetMaterial(0);
-        if (Material)
+        if (Material && !Material->IsA<UMaterialInstanceDynamic>())
         {
             UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(Material, this);
             if (DynamicMaterial)
             {
-                DynamicMaterial->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor::Red);
-                DynamicMaterial->SetScalarParameterValue(TEXT("Metallic"), 0.7f);
-                DynamicMaterial->SetScalarParameterValue(TEXT("Roughness"), 0.3f);
-                DynamicMaterial->SetScalarParameterValue(TEXT("Emissive"), 0.5f); // 강한 발광
+                DynamicMaterial->SetVectorParameterValue(TEXT("BaseColor"), TrapData.TrapColor);
+                DynamicMaterial->SetScalarParameterValue(TEXT("Metallic"), 0.8f);
+                DynamicMaterial->SetScalarParameterValue(TEXT("Roughness"), 0.2f);
+                DynamicMaterial->SetScalarParameterValue(TEXT("Emissive"), 0.6f); // 강한 발광
                 ItemMesh->SetMaterial(0, DynamicMaterial);
+                
+                UE_LOG(LogTemp, Warning, TEXT("🎨 DamageTrap: Applied red metallic material"));
             }
         }
+        
+        // ✅ 가시성 강제 보장
+        ItemMesh->SetVisibility(true);
+        ItemMesh->SetHiddenInGame(false);
+        ItemMesh->MarkRenderStateDirty();
+        
+        UE_LOG(LogTemp, Warning, TEXT("🎨 DamageTrap visuals setup complete"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ DamageTrap: ItemMesh is NULL"));
     }
 }
 
 void ACYDamageTrap::PlayTrapSound_Implementation()
 {
-    Super::PlayTrapSound_Implementation();
-    
-    // 데미지 트랩만의 사운드 (금속 소리, 가시 소리 등)
-    // TODO: 데미지 트랩 전용 사운드 추가
+    // ✅ TrapData에서 사운드 재생
+    if (TrapData.TriggerSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(GetWorld(), TrapData.TriggerSound, GetActorLocation());
+        UE_LOG(LogTemp, Log, TEXT("🗡️ Played DamageTrap trigger sound"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("🗡️ DamageTrap: No trigger sound set in TrapData"));
+    }
 }
 
 void ACYDamageTrap::ApplyCustomEffects_Implementation(ACYPlayerCharacter* Target)
@@ -144,9 +187,6 @@ void ACYDamageTrap::ApplyInstantDamage(ACYPlayerCharacter* Target)
     // 즉시 데미지 효과
     UE_LOG(LogTemp, Warning, TEXT("🗡️ Applying instant damage: %f to %s"), 
            DamageAmount, *Target->GetName());
-    
-    // 여기서 추가적인 즉시 데미지 로직을 구현할 수 있음
-    // 예: 크리티컬 히트, 특수 상태 이상 등
 }
 
 void ACYDamageTrap::ApplyDamageOverTime(ACYPlayerCharacter* Target)
@@ -159,19 +199,15 @@ void ACYDamageTrap::ApplyDamageOverTime(ACYPlayerCharacter* Target)
     // DoT(Damage over Time) 효과
     UE_LOG(LogTemp, Warning, TEXT("🗡️ Applying DoT: %f damage every %f seconds for %d ticks"), 
            DamageAmount / DamageOverTimeTicks, DamageOverTimeInterval, DamageOverTimeTicks);
-    
-    // TODO: DoT 효과를 위한 별도의 GameplayEffect 클래스 생성 및 적용
 }
 
 void ACYDamageTrap::ShowDamageVisualEffect()
 {
     // 데미지 트랩 활성화 시 시각적 효과
-    // 예: 가시 돌출, 빨간 오라 등
-    
     if (ItemMesh)
     {
         // 활성화 시 모양 변경 (더 날카롭게)
-        ItemMesh->SetWorldScale3D(FVector(0.5f, 0.5f, 0.25f));
+        ItemMesh->SetWorldScale3D(FVector(0.6f, 0.6f, 0.9f));
     }
     
     UE_LOG(LogTemp, Log, TEXT("🗡️ Damage trap visual effects activated"));
@@ -179,17 +215,31 @@ void ACYDamageTrap::ShowDamageVisualEffect()
 
 void ACYDamageTrap::CreateSpikeEffect()
 {
-    // 트랩 트리거 시 가시/스파이크 효과 생성
-    // 예: 가시 파티클, 피 효과 등
+    // ✅ TrapData에서 이펙트 재생
+    if (TrapData.TriggerEffect)
+    {
+        FVector EffectLocation = GetActorLocation();
+        EffectLocation.Z += 30.0f; // 약간 위에 효과 생성
+        
+        UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), TrapData.TriggerEffect, EffectLocation);
+        UE_LOG(LogTemp, Log, TEXT("🗡️ Spawned spike effect from TrapData"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("🗡️ DamageTrap: No trigger effect set in TrapData"));
+    }
+}
+
+void ACYDamageTrap::PlayDamageTriggerEffect()
+{
+    // 트리거 시 전용 효과 (사운드 + 이펙트)
+    PlayTrapSound();
+    CreateSpikeEffect();
     
-    FVector EffectLocation = GetActorLocation();
-    EffectLocation.Z += 30.0f; // 약간 위에 효과 생성
-    
-    // TODO: 가시/스파이크 파티클 시스템 추가
-    // if (SpikeParticleSystem)
-    // {
-    //     UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), SpikeParticleSystem, EffectLocation);
-    // }
-    
-    UE_LOG(LogTemp, Log, TEXT("🗡️ Spike effect created at location %s"), *EffectLocation.ToString());
+    // 추가적인 데미지 전용 효과
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, 
+            TEXT("⚔️ DAMAGE ACTIVATED! ⚔️"));
+    }
 }

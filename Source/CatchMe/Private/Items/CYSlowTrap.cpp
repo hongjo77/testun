@@ -1,4 +1,5 @@
-﻿#include "Items/CYSlowTrap.h"
+﻿// CYSlowTrap.cpp - 고유 메쉬 및 효과 설정
+#include "Items/CYSlowTrap.h"
 #include "Player/CYPlayerCharacter.h"
 #include "GAS/CYGameplayEffects.h"
 #include "Components/StaticMeshComponent.h"
@@ -13,34 +14,39 @@ ACYSlowTrap::ACYSlowTrap()
     ItemDescription = FText::FromString("Slows down enemies who step on it");
     TrapType = ETrapType::Slow;
     
-    // ✅ 트랩 배치 어빌리티 설정 (하드코딩 - 나중에 BP에서 설정 가능)
-    // ItemAbility = UGA_PlaceTrap::StaticClass(); // 블루프린트에서 설정하는 것이 더 안전
-    
     // 슬로우 트랩 설정
     TriggerRadius = 120.0f;
     SlowPercentage = 0.5f; // 50% 감소
     SlowDuration = 5.0f;
     SlowedMoveSpeed = 100.0f;
 
-    // 트랩 데이터 설정
+    // ✅ TrapData 완전 설정
     TrapData.TrapType = ETrapType::Slow;
     TrapData.TrapName = ItemName;
     TrapData.TrapDescription = ItemDescription;
     TrapData.TriggerRadius = TriggerRadius;
-    TrapData.TrapColor = FLinearColor::Blue; // 파란색으로 구분
+    TrapData.TrapColor = FLinearColor::Blue; // 파란색
+    
+    // ✅ 슬로우 트랩 전용 메쉬/사운드/이펙트 (블루프린트에서 설정할 것)
+    // TrapData.TrapMesh = nullptr; // 블루프린트에서 설정
+    // TrapData.TriggerSound = nullptr; // 블루프린트에서 설정
+    // TrapData.TriggerEffect = nullptr; // 블루프린트에서 설정
 
     // 슬로우 효과 설정
     TrapData.GameplayEffects.Empty();
     TrapData.GameplayEffects.Add(UGE_SlowTrap::StaticClass());
 
-    // 시각적 설정
+    UE_LOG(LogTemp, Warning, TEXT("✅ SlowTrap constructor completed"));
+    
+    // ✅ 생성자에서 기본 메쉬 설정 (안전함)
     if (ItemMesh)
     {
-        static ConstructorHelpers::FObjectFinder<UStaticMesh> SlowTrapMesh(TEXT("/Engine/BasicShapes/Cylinder"));
+        static ConstructorHelpers::FObjectFinder<UStaticMesh> SlowTrapMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
         if (SlowTrapMesh.Succeeded())
         {
             ItemMesh->SetStaticMesh(SlowTrapMesh.Object);
-            ItemMesh->SetWorldScale3D(FVector(0.6f, 0.6f, 0.1f));
+            ItemMesh->SetWorldScale3D(FVector(0.8f, 0.8f, 0.1f));
+            UE_LOG(LogTemp, Warning, TEXT("🎨 SlowTrap: Set default cylinder mesh in constructor"));
         }
     }
 }
@@ -79,37 +85,76 @@ void ACYSlowTrap::OnTrapTriggered_Implementation(ACYPlayerCharacter* Target)
                           *Target->GetName(), 
                           (int32)(SlowPercentage * 100)));
     }
+    
+    // ✅ 슬로우 트랩 전용 트리거 이펙트 재생
+    PlaySlowTriggerEffect();
 }
 
 void ACYSlowTrap::SetupTrapVisuals_Implementation()
 {
-    Super::SetupTrapVisuals_Implementation();
-    
-    // 슬로우 트랩만의 추가 시각적 설정
+    UE_LOG(LogTemp, Warning, TEXT("🎨 SlowTrap::SetupTrapVisuals called"));
+
     if (ItemMesh)
     {
-        // 파란색 머티리얼 적용 (슬로우 효과 표시)
+        // ✅ TrapData에서 메쉬 사용 (블루프린트에서 설정된 것)
+        if (TrapData.TrapMesh)
+        {
+            ItemMesh->SetStaticMesh(TrapData.TrapMesh);
+            ItemMesh->SetWorldScale3D(FVector(0.8f, 0.8f, 0.1f)); // 커스텀 메쉬용 스케일
+            UE_LOG(LogTemp, Warning, TEXT("🎨 SlowTrap: Using TrapData mesh: %s"), *TrapData.TrapMesh->GetName());
+        }
+        else
+        {
+            // ✅ 생성자에서 설정된 메쉬 사용 (이미 안전하게 로드됨)
+            UE_LOG(LogTemp, Warning, TEXT("🎨 SlowTrap: Using constructor-set mesh"));
+        }
+        
+        // ✅ 슬로우 트랩 전용 스케일 보장 (넓고 얇은 원판)
+        ItemMesh->SetWorldScale3D(FVector(0.8f, 0.8f, 0.1f));
+        
+        // ✅ 슬로우 전용 머티리얼 설정 (파란색, 약간 투명)
         UMaterialInterface* Material = ItemMesh->GetMaterial(0);
-        if (Material)
+        if (Material && !Material->IsA<UMaterialInstanceDynamic>())
         {
             UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(Material, this);
             if (DynamicMaterial)
             {
-                DynamicMaterial->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor::Blue);
-                DynamicMaterial->SetScalarParameterValue(TEXT("Metallic"), 0.8f);
-                DynamicMaterial->SetScalarParameterValue(TEXT("Roughness"), 0.2f);
+                DynamicMaterial->SetVectorParameterValue(TEXT("BaseColor"), TrapData.TrapColor);
+                DynamicMaterial->SetScalarParameterValue(TEXT("Metallic"), 0.3f);
+                DynamicMaterial->SetScalarParameterValue(TEXT("Roughness"), 0.7f);
+                DynamicMaterial->SetScalarParameterValue(TEXT("Emissive"), 0.2f); // 약한 발광
+                DynamicMaterial->SetScalarParameterValue(TEXT("Opacity"), 0.8f); // 약간 투명
                 ItemMesh->SetMaterial(0, DynamicMaterial);
+                
+                UE_LOG(LogTemp, Warning, TEXT("🎨 SlowTrap: Applied blue semi-transparent material"));
             }
         }
+        
+        // ✅ 가시성 강제 보장
+        ItemMesh->SetVisibility(true);
+        ItemMesh->SetHiddenInGame(false);
+        ItemMesh->MarkRenderStateDirty();
+        
+        UE_LOG(LogTemp, Warning, TEXT("🎨 SlowTrap visuals setup complete"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ SlowTrap: ItemMesh is NULL"));
     }
 }
 
 void ACYSlowTrap::PlayTrapSound_Implementation()
 {
-    Super::PlayTrapSound_Implementation();
-    
-    // 슬로우 트랩만의 사운드 (얼음 소리 등)
-    // TODO: 슬로우 트랩 전용 사운드 추가
+    // ✅ TrapData에서 사운드 재생
+    if (TrapData.TriggerSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(GetWorld(), TrapData.TriggerSound, GetActorLocation());
+        UE_LOG(LogTemp, Log, TEXT("🧊 Played SlowTrap trigger sound"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("🧊 SlowTrap: No trigger sound set in TrapData"));
+    }
 }
 
 void ACYSlowTrap::ApplyCustomEffects_Implementation(ACYPlayerCharacter* Target)
@@ -132,8 +177,6 @@ void ACYSlowTrap::ApplySlowEffect(ACYPlayerCharacter* Target)
     if (!TargetASC) return;
 
     // 커스텀 슬로우 효과를 위한 추가 로직
-    // 예: 특별한 슬로우 효과, 시각적 효과 등
-    
     UE_LOG(LogTemp, Log, TEXT("🧊 Applying custom slow effect: %f speed for %f seconds"), 
            SlowedMoveSpeed, SlowDuration);
 }
@@ -141,13 +184,38 @@ void ACYSlowTrap::ApplySlowEffect(ACYPlayerCharacter* Target)
 void ACYSlowTrap::ShowSlowVisualEffect()
 {
     // 슬로우 트랩 활성화 시 시각적 효과
-    // 예: 파란색 글로우, 얼음 파티클 등
-    
     if (ItemMesh)
     {
-        // 활성화 시 크기 약간 증가
-        ItemMesh->SetWorldScale3D(FVector(0.7f, 0.7f, 0.12f));
+        // 활성화 시 크기 약간 증가 (파란색 원판 확장)
+        ItemMesh->SetWorldScale3D(FVector(0.9f, 0.9f, 0.12f));
     }
     
     UE_LOG(LogTemp, Log, TEXT("🧊 Slow trap visual effects activated"));
+}
+
+void ACYSlowTrap::PlaySlowTriggerEffect()
+{
+    // 트리거 시 전용 효과 (사운드 + 이펙트)
+    PlayTrapSound();
+    
+    // ✅ TrapData에서 이펙트 재생
+    if (TrapData.TriggerEffect)
+    {
+        FVector EffectLocation = GetActorLocation();
+        EffectLocation.Z += 20.0f; // 슬로우는 지면 근처에
+        
+        UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), TrapData.TriggerEffect, EffectLocation);
+        UE_LOG(LogTemp, Log, TEXT("🧊 Spawned slow effect from TrapData"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("🧊 SlowTrap: No trigger effect set in TrapData"));
+    }
+    
+    // 추가적인 슬로우 전용 효과
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Blue, 
+            TEXT("🌀 SLOW ACTIVATED! 🌀"));
+    }
 }

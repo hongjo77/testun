@@ -1,4 +1,4 @@
-// CYTrapBase.cpp - 클라이언트 메시 동기화 개선
+// CYTrapBase.cpp - 개선된 시각적 설정 시스템
 #include "Items/CYTrapBase.h"
 #include "Player/CYPlayerCharacter.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -29,24 +29,26 @@ ACYTrapBase::ACYTrapBase()
     SetReplicateMovement(true);
     bAlwaysRelevant = true;
 
-    // ✅ 기본 메시 설정 개선
+    // ✅ 기본 메시 설정을 하위 클래스에 위임
     if (ItemMesh)
     {
-        static ConstructorHelpers::FObjectFinder<UStaticMesh> TrapMeshAsset(TEXT("/Engine/BasicShapes/Cylinder"));
-        if (TrapMeshAsset.Succeeded())
-        {
-            ItemMesh->SetStaticMesh(TrapMeshAsset.Object);
-            ItemMesh->SetWorldScale3D(FVector(0.5f, 0.5f, 0.1f));
-        }
-        
-        // ✅ 기본 메시 설정 강화
+        // 기본 설정만 해두고, 구체적인 메쉬는 하위 클래스에서 설정
         ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         ItemMesh->SetVisibility(true);
-        ItemMesh->SetHiddenInGame(false); // 명시적으로 표시
-        ItemMesh->SetCastShadow(true); // 그림자 활성화
+        ItemMesh->SetHiddenInGame(false);
+        ItemMesh->SetCastShadow(true);
+        
+        // ✅ TrapBase에서는 기본 원통 메쉬 설정 (하위 클래스에서 오버라이드)
+        static ConstructorHelpers::FObjectFinder<UStaticMesh> BaseTrapMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+        if (BaseTrapMesh.Succeeded())
+        {
+            ItemMesh->SetStaticMesh(BaseTrapMesh.Object);
+            ItemMesh->SetWorldScale3D(FVector(0.5f, 0.5f, 0.1f));
+            UE_LOG(LogTemp, Warning, TEXT("🎨 TrapBase: Set default cylinder mesh in constructor"));
+        }
     }
 
-    // 기본 트랩 데이터 초기화
+    // 기본 트랩 데이터 초기화 (하위 클래스에서 덮어씀)
     TrapData.TrapType = TrapType;
     TrapData.TrapName = ItemName;
     TrapData.TrapDescription = ItemDescription;
@@ -60,7 +62,6 @@ void ACYTrapBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACYTrapBase, TrapState);
     DOREPLIFETIME(ACYTrapBase, bIsArmed);
-    // ✅ TrapType도 리플리케이트하여 클라이언트에서 올바른 타입 인식
     DOREPLIFETIME(ACYTrapBase, TrapType);
     DOREPLIFETIME(ACYTrapBase, TrapData);
 }
@@ -69,11 +70,11 @@ void ACYTrapBase::BeginPlay()
 {
     Super::BeginPlay();
 
-    // ✅ 모든 클라이언트에서 상태별 트랩 설정
-    SetupTrapForCurrentState();
+    // ✅ 초기 시각적 설정 - 서버와 클라이언트 모두에서
+    InitializeTrapVisuals();
     
-    // ✅ 서버와 클라이언트 모두에서 비주얼 설정
-    SetupTrapVisuals();
+    // ✅ 상태별 트랩 설정
+    SetupTrapForCurrentState();
     
     // ✅ 서버에서만 로직 처리
     if (HasAuthority())
@@ -81,11 +82,32 @@ void ACYTrapBase::BeginPlay()
         OnTrapSpawned();
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("🎯 Trap BeginPlay: %s (State: %s, Authority: %s, CollisionEnabled: %s)"), 
+    UE_LOG(LogTemp, Warning, TEXT("🎯 Trap BeginPlay: %s (State: %s, Authority: %s)"), 
            *ItemName.ToString(), 
            TrapState == ETrapState::MapPlaced ? TEXT("MapPlaced") : TEXT("PlayerPlaced"),
-           HasAuthority() ? TEXT("Server") : TEXT("Client"),
-           InteractionSphere ? (InteractionSphere->GetCollisionEnabled() != ECollisionEnabled::NoCollision ? TEXT("Enabled") : TEXT("Disabled")) : TEXT("NULL"));
+           HasAuthority() ? TEXT("Server") : TEXT("Client"));
+}
+
+void ACYTrapBase::InitializeTrapVisuals()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🎨 InitializeTrapVisuals called for %s"), *GetClass()->GetName());
+    
+    // ✅ 하위 클래스의 SetupTrapVisuals 호출
+    SetupTrapVisuals();
+    
+    // ✅ 추가 초기화 (필요시)
+    if (ItemMesh)
+    {
+        // 기본 트랜스폼 보정
+        FVector CurrentLocation = ItemMesh->GetRelativeLocation();
+        if (CurrentLocation.Z < -10.0f || CurrentLocation.Z > 10.0f)
+        {
+            ItemMesh->SetRelativeLocation(FVector(0, 0, 0));
+        }
+        
+        UE_LOG(LogTemp, Warning, TEXT("🎨 Trap visuals initialized: %s"), 
+               ItemMesh->GetStaticMesh() ? *ItemMesh->GetStaticMesh()->GetName() : TEXT("No Mesh"));
+    }
 }
 
 void ACYTrapBase::SetupTrapForCurrentState()
@@ -110,8 +132,7 @@ void ACYTrapBase::SetupTrapForCurrentState()
             InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &ACYTrapBase::OnPickupSphereEndOverlap);
         }
         
-        UE_LOG(LogTemp, Warning, TEXT("🎯 Trap set as PICKUPABLE: %s (Radius: %f)"), 
-               *ItemName.ToString(), InteractionSphere->GetScaledSphereRadius());
+        UE_LOG(LogTemp, Warning, TEXT("🎯 Trap set as PICKUPABLE: %s"), *ItemName.ToString());
     }
     else if (TrapState == ETrapState::PlayerPlaced)
     {
@@ -138,7 +159,7 @@ void ACYTrapBase::ConvertToPlayerPlacedTrap(AActor* PlacingPlayer)
     // ✅ 클라이언트들에게 즉시 시각적 업데이트 알림
     MulticastUpdateTrapVisuals();
     
-    // ✅ 추가: 네트워크 업데이트 강제 실행
+    // ✅ 네트워크 업데이트 강제 실행
     ForceNetUpdate();
     
     UE_LOG(LogTemp, Warning, TEXT("🎯 Trap converted to PlayerPlaced by %s"), 
@@ -208,25 +229,14 @@ void ACYTrapBase::OnTriggerSphereOverlap(UPrimitiveComponent* OverlappedComponen
     Destroy();
 }
 
-// ✅ 새로운 멀티캐스트 함수 - 시각적 업데이트
+// ✅ 개선된 멀티캐스트 함수 - 시각적 업데이트
 void ACYTrapBase::MulticastUpdateTrapVisuals_Implementation()
 {
     UE_LOG(LogTemp, Warning, TEXT("🎨 MulticastUpdateTrapVisuals called on %s"), 
            HasAuthority() ? TEXT("Server") : TEXT("Client"));
     
-    // ✅ 클라이언트에서도 강제로 시각적 설정
-    SetupTrapVisuals();
-    
-    // ✅ 메시 가시성 강제 설정
-    if (ItemMesh)
-    {
-        ItemMesh->SetVisibility(true);
-        ItemMesh->SetHiddenInGame(false);
-        ItemMesh->MarkRenderStateDirty();
-        
-        UE_LOG(LogTemp, Warning, TEXT("🎨 Client mesh visibility forced: %s"), 
-               ItemMesh->IsVisible() ? TEXT("true") : TEXT("false"));
-    }
+    // ✅ 클라이언트에서 강제로 시각적 재설정
+    InitializeTrapVisuals();
 }
 
 void ACYTrapBase::MulticastOnTrapTriggered_Implementation(ACYPlayerCharacter* Target)
@@ -234,7 +244,6 @@ void ACYTrapBase::MulticastOnTrapTriggered_Implementation(ACYPlayerCharacter* Ta
     if (!HasAuthority()) // 클라이언트에서만 실행
     {
         OnTrapTriggered(Target);
-        SetupTrapVisuals(); // 트리거 시각 효과
     }
 }
 
@@ -281,87 +290,36 @@ void ACYTrapBase::OnTrapDestroyed_Implementation()
     UE_LOG(LogTemp, Log, TEXT("🗑️ Base trap destroyed"));
 }
 
+// ✅ 기본 구현 - 하위 클래스에서 오버라이드해야 함
 void ACYTrapBase::SetupTrapVisuals_Implementation()
 {
-    UE_LOG(LogTemp, Warning, TEXT("🎨 SetupTrapVisuals called on %s"), 
-           HasAuthority() ? TEXT("Server") : TEXT("Client"));
+    UE_LOG(LogTemp, Warning, TEXT("🎨 SetupTrapVisuals (BASE) called for %s"), *GetClass()->GetName());
 
     if (ItemMesh)
     {
-        // ✅ 기본 메시가 없으면 설정
+        // ✅ 기본 메시 설정 (이미 생성자에서 설정되었거나 하위 클래스에서 설정됨)
         if (!ItemMesh->GetStaticMesh())
         {
-            static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultMesh(TEXT("/Engine/BasicShapes/Cylinder"));
-            if (DefaultMesh.Succeeded())
-            {
-                ItemMesh->SetStaticMesh(DefaultMesh.Object);
-                UE_LOG(LogTemp, Warning, TEXT("🎨 Set default cylinder mesh"));
-            }
+            UE_LOG(LogTemp, Error, TEXT("❌ BASE: No mesh set in constructor! This should not happen."));
         }
-        
-        // ✅ TrapData에서 메시가 있으면 사용
-        if (TrapData.TrapMesh)
+        else
         {
-            ItemMesh->SetStaticMesh(TrapData.TrapMesh);
-            UE_LOG(LogTemp, Warning, TEXT("🎨 Set TrapData mesh: %s"), *TrapData.TrapMesh->GetName());
-        }
-        
-        // ✅ 기본 스케일 보장
-        FVector CurrentScale = ItemMesh->GetComponentScale();
-        if (CurrentScale.IsNearlyZero())
-        {
-            ItemMesh->SetWorldScale3D(FVector(0.5f, 0.5f, 0.1f));
+            UE_LOG(LogTemp, Warning, TEXT("🎨 BASE: Using existing mesh: %s"), 
+                   ItemMesh->GetStaticMesh() ? *ItemMesh->GetStaticMesh()->GetName() : TEXT("NULL"));
         }
         
         // ✅ 가시성 강제 보장
         ItemMesh->SetVisibility(true);
         ItemMesh->SetHiddenInGame(false);
         ItemMesh->SetCastShadow(true);
-        
-        // ✅ 렌더 상태 업데이트 강제
         ItemMesh->MarkRenderStateDirty();
         
-        // ✅ 머티리얼 설정 개선 - 중복 생성 방지
-        UMaterialInterface* Material = ItemMesh->GetMaterial(0);
-        if (Material && !Material->IsA<UMaterialInstanceDynamic>())
-        {
-            UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(Material, this);
-            if (DynamicMaterial)
-            {
-                DynamicMaterial->SetVectorParameterValue(TEXT("BaseColor"), TrapData.TrapColor);
-                ItemMesh->SetMaterial(0, DynamicMaterial);
-                
-                UE_LOG(LogTemp, Warning, TEXT("🎨 Applied dynamic material with color %s"), 
-                       *TrapData.TrapColor.ToString());
-            }
-        }
-        else if (!Material)
-        {
-            // ✅ 머티리얼이 없으면 기본 머티리얼 생성
-            UMaterialInterface* DefaultMat = UMaterial::GetDefaultMaterial(MD_Surface);
-            if (DefaultMat)
-            {
-                UMaterialInstanceDynamic* DefaultMaterial = UMaterialInstanceDynamic::Create(DefaultMat, this);
-                if (DefaultMaterial)
-                {
-                    DefaultMaterial->SetVectorParameterValue(TEXT("BaseColor"), TrapData.TrapColor);
-                    ItemMesh->SetMaterial(0, DefaultMaterial);
-                    
-                    UE_LOG(LogTemp, Warning, TEXT("🎨 Created default material with color %s"), 
-                           *TrapData.TrapColor.ToString());
-                }
-            }
-        }
-        
-        UE_LOG(LogTemp, Warning, TEXT("🎨 Trap visuals setup complete: Mesh=%s, Scale=%s, Visible=%s, Hidden=%s"), 
-               ItemMesh->GetStaticMesh() ? *ItemMesh->GetStaticMesh()->GetName() : TEXT("NULL"),
-               *ItemMesh->GetComponentScale().ToString(),
-               ItemMesh->IsVisible() ? TEXT("true") : TEXT("false"),
-               ItemMesh->bHiddenInGame ? TEXT("true") : TEXT("false"));
+        UE_LOG(LogTemp, Warning, TEXT("🎨 BASE trap visuals setup complete: %s"), 
+               ItemMesh->GetStaticMesh() ? *ItemMesh->GetStaticMesh()->GetName() : TEXT("NULL"));
     }
     else
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ ItemMesh is NULL in SetupTrapVisuals"));
+        UE_LOG(LogTemp, Error, TEXT("❌ BASE: ItemMesh is NULL"));
     }
 }
 

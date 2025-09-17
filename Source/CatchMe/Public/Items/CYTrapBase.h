@@ -1,4 +1,4 @@
-// CYTrapBase.h - 시각적 업데이트 멀티캐스트 함수 추가
+// CYTrapBase.h - 개선된 헤더 파일
 #pragma once
 
 #include "CoreMinimal.h"
@@ -50,7 +50,7 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Trap Settings")
     float TrapLifetime = 60.0f;
 
-    // 가상 함수들
+    // ✅ 이벤트 함수들 (하위 클래스에서 오버라이드)
     UFUNCTION(BlueprintNativeEvent, Category = "Trap Events")
     void OnTrapSpawned();
     virtual void OnTrapSpawned_Implementation();
@@ -71,7 +71,6 @@ public:
     UFUNCTION(NetMulticast, Reliable, Category = "Trap Events")
     void MulticastOnTrapTriggered(ACYPlayerCharacter* Target);
 
-    // ✅ 새로운 시각적 업데이트 멀티캐스트 함수
     UFUNCTION(NetMulticast, Reliable, Category = "Trap Visuals")
     void MulticastUpdateTrapVisuals();
 
@@ -83,17 +82,20 @@ protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-    // 트랩 시각적 설정
+    // ✅ 시각적 설정 함수들 (하위 클래스에서 오버라이드 필수)
+    UFUNCTION(BlueprintCallable, Category = "Trap Initialization")
+    void InitializeTrapVisuals();
+
     UFUNCTION(BlueprintNativeEvent, Category = "Trap Visuals")
     void SetupTrapVisuals();
     virtual void SetupTrapVisuals_Implementation();
 
-    // 트랩 사운드 재생
+    // 트랩 사운드 재생 (하위 클래스에서 오버라이드)
     UFUNCTION(BlueprintNativeEvent, Category = "Trap Audio")
     void PlayTrapSound();
     virtual void PlayTrapSound_Implementation();
 
-    // 하위 클래스별 커스텀 효과 적용
+    // 하위 클래스별 커스텀 효과 적용 (하위 클래스에서 오버라이드)
     UFUNCTION(BlueprintNativeEvent, Category = "Trap Effects")
     void ApplyCustomEffects(ACYPlayerCharacter* Target);
     virtual void ApplyCustomEffects_Implementation(ACYPlayerCharacter* Target);
