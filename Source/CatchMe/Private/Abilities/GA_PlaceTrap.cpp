@@ -1,4 +1,4 @@
-﻿// GA_PlaceTrap.cpp - SourceObject 문제 해결
+﻿// GA_PlaceTrap.cpp - 특정 아이템 사용 수정
 #include "Abilities/GA_PlaceTrap.h"
 #include "Items/CYTrapFactory.h"
 #include "Items/CYItemBase.h"
@@ -13,9 +13,8 @@
 UGA_PlaceTrap::UGA_PlaceTrap()
 {
     InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerExecution;
-    NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerInitiated; // ✅ 서버에서만 실행
+    NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerInitiated;
 
-    // ✅ 하드코딩된 태그 사용
     FGameplayTag PlaceTrapTag = FGameplayTag::RequestGameplayTag(FName("Ability.Trap.Place"));
     FGameplayTag StunnedTag = FGameplayTag::RequestGameplayTag(FName("State.Stunned"));
     FGameplayTag DeadTag = FGameplayTag::RequestGameplayTag(FName("State.Dead"));
@@ -65,12 +64,28 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
         return;
     }
 
-    // ✅ 새로운 방식: 인벤토리에서 직접 아이템 가져오기
-    ACYItemBase* SourceItem = FindValidTrapItemInInventory(OwnerActor);
+    // ✅ SourceObject에서 특정 아이템 가져오기 (우선순위 1)
+    ACYItemBase* SourceItem = nullptr;
+    
+    // AbilitySpec의 SourceObject 확인
+    FGameplayAbilitySpec* AbilitySpec = ActorInfo->AbilitySystemComponent->FindAbilitySpecFromHandle(Handle);
+    if (AbilitySpec && AbilitySpec->SourceObject.IsValid())
+    {
+        SourceItem = Cast<ACYItemBase>(AbilitySpec->SourceObject.Get());
+        UE_LOG(LogTemp, Warning, TEXT("🎯 GA_PlaceTrap: Using SourceObject item: %s"), 
+               SourceItem ? *SourceItem->ItemName.ToString() : TEXT("Invalid"));
+    }
+    
+    // ✅ 백업: 인벤토리에서 트랩 아이템 찾기 (우선순위 2)
+    if (!SourceItem)
+    {
+        SourceItem = FindValidTrapItemInInventory(OwnerActor);
+        UE_LOG(LogTemp, Warning, TEXT("🎯 GA_PlaceTrap: Using fallback inventory search"));
+    }
     
     if (!SourceItem)
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ GA_PlaceTrap: No valid trap item found in inventory"));
+        UE_LOG(LogTemp, Error, TEXT("❌ GA_PlaceTrap: No valid trap item found"));
         EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
         return;
     }
@@ -99,8 +114,8 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
         UE_LOG(LogTemp, Warning, TEXT("✅ Trap successfully created: %s"), 
                *NewTrap->GetClass()->GetName());
         
-        // ✅ 트랩 설치 후 아이템 소모 처리
-        ConsumeItemFromInventory(OwnerActor, SourceItem);
+        // ✅ 트랩 설치 후 해당 특정 아이템 소모 처리
+        ConsumeSpecificItemFromInventory(OwnerActor, SourceItem);
     }
     else
     {
@@ -133,14 +148,14 @@ ACYItemBase* UGA_PlaceTrap::FindValidTrapItemInInventory(AActor* OwnerActor)
     return nullptr;
 }
 
-void UGA_PlaceTrap::ConsumeItemFromInventory(AActor* OwnerActor, ACYItemBase* SourceItem)
+void UGA_PlaceTrap::ConsumeSpecificItemFromInventory(AActor* OwnerActor, ACYItemBase* SourceItem)
 {
     if (!OwnerActor || !SourceItem) return;
 
     UCYInventoryComponent* InventoryComp = OwnerActor->FindComponentByClass<UCYInventoryComponent>();
     if (!InventoryComp) return;
 
-    // 아이템 수량 감소
+    // ✅ 해당 특정 아이템만 소모
     SourceItem->ItemCount--;
     
     if (SourceItem->ItemCount <= 0)
@@ -175,7 +190,7 @@ void UGA_PlaceTrap::ConsumeItemFromInventory(AActor* OwnerActor, ACYItemBase* So
         }
     }
     
-    UE_LOG(LogTemp, Warning, TEXT("🔧 Consumed trap item: %s (Remaining: %d)"), 
+    UE_LOG(LogTemp, Warning, TEXT("🔧 Consumed specific trap item: %s (Remaining: %d)"), 
            *SourceItem->ItemName.ToString(), SourceItem->ItemCount);
 }
 

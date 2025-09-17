@@ -113,30 +113,42 @@ ETrapType UCYTrapFactory::InferTrapTypeFromItem(ACYItemBase* Item)
 
     FString ItemName = Item->ItemName.ToString().ToLower();
     
-    // 아이템 이름으로 트랩 타입 추론
-    if (ItemName.Contains(TEXT("slow")) || ItemName.Contains(TEXT("슬로우")))
+    UE_LOG(LogTemp, Warning, TEXT("🏭 InferTrapTypeFromItem: '%s'"), *ItemName);
+    
+    // ✅ TestTrap 특별 처리 - Freeze 타입으로 설정
+    if (ItemName.Contains(TEXT("test trap")) || ItemName.Equals(TEXT("test trap")))
     {
+        UE_LOG(LogTemp, Warning, TEXT("🏭 Test Trap detected -> Freeze type"));
+        return ETrapType::Freeze;
+    }
+    // ✅ 기존 추론 로직
+    else if (ItemName.Contains(TEXT("slow")) || ItemName.Contains(TEXT("슬로우")))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("🏭 Slow Trap detected"));
         return ETrapType::Slow;
     }
     else if (ItemName.Contains(TEXT("freeze")) || ItemName.Contains(TEXT("frost")) || 
              ItemName.Contains(TEXT("ice")) || ItemName.Contains(TEXT("프리즈")) || 
              ItemName.Contains(TEXT("얼음")))
     {
+        UE_LOG(LogTemp, Warning, TEXT("🏭 Freeze Trap detected"));
         return ETrapType::Freeze;
     }
     else if (ItemName.Contains(TEXT("damage")) || ItemName.Contains(TEXT("spike")) || 
              ItemName.Contains(TEXT("harm")) || ItemName.Contains(TEXT("데미지")) || 
              ItemName.Contains(TEXT("가시")))
     {
+        UE_LOG(LogTemp, Warning, TEXT("🏭 Damage Trap detected"));
         return ETrapType::Damage;
     }
     else if (ItemName.Contains(TEXT("explosion")) || ItemName.Contains(TEXT("bomb")) || 
              ItemName.Contains(TEXT("폭발")) || ItemName.Contains(TEXT("폭탄")))
     {
+        UE_LOG(LogTemp, Warning, TEXT("🏭 Explosion Trap detected"));
         return ETrapType::Explosion;
     }
 
-    // 기본값은 슬로우 트랩
+    // ✅ 기본값 변경: TestTrap이 아니면 Slow
     UE_LOG(LogTemp, Warning, TEXT("⚠️ Could not infer trap type from item name '%s', using Slow as default"), 
            *ItemName);
     return ETrapType::Slow;

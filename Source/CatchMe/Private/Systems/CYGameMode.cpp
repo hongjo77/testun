@@ -14,9 +14,4 @@ ACYGameMode::ACYGameMode()
 void ACYGameMode::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	// ✅ 게임 시작 시 한 번만 GameplayTags 초기화
-	UE_LOG(LogTemp, Warning, TEXT("🎮 GameMode: Initializing GameplayTags..."));
-	FCYGameplayTags::InitializeNativeTags();
-	UE_LOG(LogTemp, Warning, TEXT("🎮 GameMode: GameplayTags initialization completed"));
 }

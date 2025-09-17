@@ -100,9 +100,6 @@ bool UCYWeaponComponent::ExecuteWeaponAttack()
         return false;
     }
 
-    // ✅ GameplayTags 초기화 제거 - 한 번만 초기화되도록 함
-    // FCYGameplayTags::InitializeNativeTags(); // 이 줄 제거!
-    
     // ✅ 안전한 태그 가져오기
     FGameplayTag WeaponAttackTag = FGameplayTag::RequestGameplayTag(FName("Ability.Weapon.Attack"));
     
@@ -123,13 +120,28 @@ bool UCYWeaponComponent::ExecuteWeaponAttack()
     
     UE_LOG(LogTemp, Warning, TEXT("🗡️ Found %d activatable abilities"), ActivatableAbilities.Num());
     
-    TArray<FGameplayAbilitySpec> AllAbilities = ASC->GetActivatableAbilities();
-    UE_LOG(LogTemp, Warning, TEXT("🗡️ Total abilities in ASC: %d"), AllAbilities.Num());
+    // ✅ 중복 실행 방지: 첫 번째 어빌리티만 실행
+    if (ActivatableAbilities.Num() > 0)
+    {
+        FGameplayAbilitySpec* FirstAbility = ActivatableAbilities[0];
+        if (FirstAbility && FirstAbility->Handle.IsValid())
+        {
+            UE_LOG(LogTemp, Warning, TEXT("🗡️ Executing FIRST ability only: %s"), 
+                   FirstAbility->Ability ? *FirstAbility->Ability->GetName() : TEXT("NULL"));
+            
+            bool bResult = ASC->TryActivateAbility(FirstAbility->Handle);
+            UE_LOG(LogTemp, Warning, TEXT("🗡️ Weapon attack result: %s"), bResult ? TEXT("Success") : TEXT("Failed"));
+            
+            return bResult;
+        }
+    }
     
-    bool bResult = ASC->TryActivateAbilityByTag(WeaponAttackTag);
-    UE_LOG(LogTemp, Warning, TEXT("🗡️ Weapon attack result: %s"), bResult ? TEXT("Success") : TEXT("Failed"));
+    // ✅ 백업: 일반적인 태그 활성화 (하지만 이미 위에서 처리됨)
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ No valid ability spec found, trying fallback"));
+    bool bFallbackResult = ASC->TryActivateAbilityByTag(WeaponAttackTag);
+    UE_LOG(LogTemp, Warning, TEXT("🗡️ Fallback result: %s"), bFallbackResult ? TEXT("Success") : TEXT("Failed"));
     
-    return bResult;
+    return bFallbackResult;
 }
 
 void UCYWeaponComponent::DisplayInventoryStatus()

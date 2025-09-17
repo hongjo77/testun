@@ -1,4 +1,4 @@
-// CYTrapBase.cpp - 네트워크 동기화 개선
+// CYTrapBase.cpp - 클라이언트 메시 동기화 개선
 #include "Items/CYTrapBase.h"
 #include "Player/CYPlayerCharacter.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -21,15 +21,15 @@ ACYTrapBase::ACYTrapBase()
 
     MaxStackCount = 5;
     ItemCount = 1;
-    TrapType = ETrapType::Slow; // 기본값
-    TrapState = ETrapState::MapPlaced; // ✅ 기본적으로 맵 배치 상태
+    TrapType = ETrapType::Slow;
+    TrapState = ETrapState::MapPlaced;
 
     // ✅ 네트워킹 설정 강화
     bReplicates = true;
     SetReplicateMovement(true);
-    bAlwaysRelevant = true; // 모든 클라이언트에게 항상 관련됨
+    bAlwaysRelevant = true;
 
-    // 기본 메시 설정
+    // ✅ 기본 메시 설정 개선
     if (ItemMesh)
     {
         static ConstructorHelpers::FObjectFinder<UStaticMesh> TrapMeshAsset(TEXT("/Engine/BasicShapes/Cylinder"));
@@ -38,8 +38,12 @@ ACYTrapBase::ACYTrapBase()
             ItemMesh->SetStaticMesh(TrapMeshAsset.Object);
             ItemMesh->SetWorldScale3D(FVector(0.5f, 0.5f, 0.1f));
         }
+        
+        // ✅ 기본 메시 설정 강화
         ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         ItemMesh->SetVisibility(true);
+        ItemMesh->SetHiddenInGame(false); // 명시적으로 표시
+        ItemMesh->SetCastShadow(true); // 그림자 활성화
     }
 
     // 기본 트랩 데이터 초기화
@@ -55,7 +59,10 @@ void ACYTrapBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACYTrapBase, TrapState);
-    DOREPLIFETIME(ACYTrapBase, bIsArmed); // ✅ Armed 상태도 리플리케이트
+    DOREPLIFETIME(ACYTrapBase, bIsArmed);
+    // ✅ TrapType도 리플리케이트하여 클라이언트에서 올바른 타입 인식
+    DOREPLIFETIME(ACYTrapBase, TrapType);
+    DOREPLIFETIME(ACYTrapBase, TrapData);
 }
 
 void ACYTrapBase::BeginPlay()
@@ -65,10 +72,13 @@ void ACYTrapBase::BeginPlay()
     // ✅ 모든 클라이언트에서 상태별 트랩 설정
     SetupTrapForCurrentState();
     
+    // ✅ 서버와 클라이언트 모두에서 비주얼 설정
+    SetupTrapVisuals();
+    
+    // ✅ 서버에서만 로직 처리
     if (HasAuthority())
     {
         OnTrapSpawned();
-        SetupTrapVisuals();
     }
 
     UE_LOG(LogTemp, Warning, TEXT("🎯 Trap BeginPlay: %s (State: %s, Authority: %s, CollisionEnabled: %s)"), 
@@ -89,8 +99,6 @@ void ACYTrapBase::SetupTrapForCurrentState()
         InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
         InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
         InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-        
-        // ✅ 오브젝트 타입을 WorldDynamic으로 설정 (SphereOverlapActors가 찾을 수 있도록)
         InteractionSphere->SetCollisionObjectType(ECC_WorldDynamic);
         
         // ✅ 서버에서만 픽업 바인딩
@@ -121,19 +129,16 @@ void ACYTrapBase::ConvertToPlayerPlacedTrap(AActor* PlacingPlayer)
 {
     if (!HasAuthority()) return;
 
-    // ✅ 상태 변경
     TrapState = ETrapState::PlayerPlaced;
-    
-    // ✅ 소유자 설정 (설치한 플레이어)
     SetOwner(PlacingPlayer);
-    
-    // ✅ 픽업 불가능하게 설정
     bIsPickedUp = true;
     
-    // ✅ 상태에 맞게 재설정
     SetupTrapForCurrentState();
     
-    // ✅ 클라이언트에게 강제 업데이트
+    // ✅ 클라이언트들에게 즉시 시각적 업데이트 알림
+    MulticastUpdateTrapVisuals();
+    
+    // ✅ 추가: 네트워크 업데이트 강제 실행
     ForceNetUpdate();
     
     UE_LOG(LogTemp, Warning, TEXT("🎯 Trap converted to PlayerPlaced by %s"), 
@@ -142,14 +147,11 @@ void ACYTrapBase::ConvertToPlayerPlacedTrap(AActor* PlacingPlayer)
 
 void ACYTrapBase::SetupTrapTimers()
 {
-    // ✅ 플레이어가 설치한 트랩만 타이머 설정
     if (TrapState != ETrapState::PlayerPlaced) return;
 
-    // 트랩 활성화 타이머
     GetWorld()->GetTimerManager().SetTimer(ArmingTimer, this, &ACYTrapBase::ArmTrap, 
                                           TrapData.ArmingDelay, false);
     
-    // 트랩 수명 타이머
     GetWorld()->GetTimerManager().SetTimer(LifetimeTimer, [this]()
     {
         Destroy();
@@ -162,7 +164,6 @@ void ACYTrapBase::ArmTrap()
 
     bIsArmed = true;
 
-    // ✅ 트리거 영역으로 재설정
     if (InteractionSphere)
     {
         InteractionSphere->SetSphereRadius(TrapData.TriggerRadius);
@@ -170,16 +171,12 @@ void ACYTrapBase::ArmTrap()
         InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
         InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
         
-        // 기존 바인딩 제거 후 트리거 바인딩
         InteractionSphere->OnComponentBeginOverlap.Clear();
         InteractionSphere->OnComponentEndOverlap.Clear();
         InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &ACYTrapBase::OnTriggerSphereOverlap);
     }
 
-    // ✅ 클라이언트에게 Armed 상태 전파
     ForceNetUpdate();
-    
-    // 트랩 활성화 이벤트
     OnTrapArmed();
 
     UE_LOG(LogTemp, Log, TEXT("✅ Trap armed and ready: %s"), *ItemName.ToString());
@@ -189,10 +186,8 @@ void ACYTrapBase::OnTriggerSphereOverlap(UPrimitiveComponent* OverlappedComponen
         UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
         bool bFromSweep, const FHitResult& SweepResult)
 {
-    // ✅ 오직 플레이어가 설치한 트랩만 트리거됨
     if (TrapState != ETrapState::PlayerPlaced || !bIsArmed || !HasAuthority()) return;
 
-    // ✅ 설치한 사람은 자신의 트랩에 걸리지 않음
     if (OtherActor == GetOwner())
     {
         UE_LOG(LogTemp, Log, TEXT("🚫 Trap owner stepped on own trap - ignoring"));
@@ -206,20 +201,34 @@ void ACYTrapBase::OnTriggerSphereOverlap(UPrimitiveComponent* OverlappedComponen
            *Target->GetName(), 
            GetOwner() ? *GetOwner()->GetName() : TEXT("Unknown"));
 
-    // 트랩 트리거 이벤트
     OnTrapTriggered(Target);
-    
-    // 효과 적용
     ApplyTrapEffects(Target);
-    
-    // ✅ 멀티캐스트 RPC로 모든 클라이언트에게 트리거 알림
     MulticastOnTrapTriggered(Target);
     
-    // 트랩 파괴
     Destroy();
 }
 
-// ✅ 새로운 멀티캐스트 함수
+// ✅ 새로운 멀티캐스트 함수 - 시각적 업데이트
+void ACYTrapBase::MulticastUpdateTrapVisuals_Implementation()
+{
+    UE_LOG(LogTemp, Warning, TEXT("🎨 MulticastUpdateTrapVisuals called on %s"), 
+           HasAuthority() ? TEXT("Server") : TEXT("Client"));
+    
+    // ✅ 클라이언트에서도 강제로 시각적 설정
+    SetupTrapVisuals();
+    
+    // ✅ 메시 가시성 강제 설정
+    if (ItemMesh)
+    {
+        ItemMesh->SetVisibility(true);
+        ItemMesh->SetHiddenInGame(false);
+        ItemMesh->MarkRenderStateDirty();
+        
+        UE_LOG(LogTemp, Warning, TEXT("🎨 Client mesh visibility forced: %s"), 
+               ItemMesh->IsVisible() ? TEXT("true") : TEXT("false"));
+    }
+}
+
 void ACYTrapBase::MulticastOnTrapTriggered_Implementation(ACYPlayerCharacter* Target)
 {
     if (!HasAuthority()) // 클라이언트에서만 실행
@@ -229,48 +238,38 @@ void ACYTrapBase::MulticastOnTrapTriggered_Implementation(ACYPlayerCharacter* Ta
     }
 }
 
-// ✅ 픽업용 래퍼 함수들 (부모 클래스의 protected 함수 호출)
 void ACYTrapBase::OnPickupSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
     UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
     bool bFromSweep, const FHitResult& SweepResult)
 {
-    // 부모 클래스의 픽업 함수 호출
     OnSphereOverlap(OverlappedComponent, OtherActor, OtherComp, OtherBodyIndex, bFromSweep, SweepResult);
 }
 
 void ACYTrapBase::OnPickupSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
     UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-    // 부모 클래스의 픽업 함수 호출
     OnSphereEndOverlap(OverlappedComponent, OtherActor, OtherComp, OtherBodyIndex);
 }
 
 void ACYTrapBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    // 트랩 파괴 이벤트
     OnTrapDestroyed();
-    
     Super::EndPlay(EndPlayReason);
 }
 
 void ACYTrapBase::OnTrapSpawned_Implementation()
 {
-    // 기본 구현 - 하위 클래스에서 오버라이드 가능
     UE_LOG(LogTemp, Log, TEXT("🔧 Base trap spawned"));
 }
 
 void ACYTrapBase::OnTrapArmed_Implementation()
 {
-    // 기본 구현 - 하위 클래스에서 오버라이드 가능
     UE_LOG(LogTemp, Warning, TEXT("⚡ Base trap armed"));
-    
-    // 사운드 재생
     PlayTrapSound();
 }
 
 void ACYTrapBase::OnTrapTriggered_Implementation(ACYPlayerCharacter* Target)
 {
-    // 기본 구현 - 하위 클래스에서 오버라이드 가능
     if (Target)
     {
         UE_LOG(LogTemp, Warning, TEXT("💥 Base trap triggered on %s"), *Target->GetName());
@@ -279,32 +278,90 @@ void ACYTrapBase::OnTrapTriggered_Implementation(ACYPlayerCharacter* Target)
 
 void ACYTrapBase::OnTrapDestroyed_Implementation()
 {
-    // 기본 구현 - 하위 클래스에서 오버라이드 가능
     UE_LOG(LogTemp, Log, TEXT("🗑️ Base trap destroyed"));
 }
 
 void ACYTrapBase::SetupTrapVisuals_Implementation()
 {
-    // 기본 구현 - 하위 클래스에서 오버라이드
-    if (ItemMesh && TrapData.TrapMesh)
-    {
-        ItemMesh->SetStaticMesh(TrapData.TrapMesh);
-    }
-    
-    // 색상 설정
+    UE_LOG(LogTemp, Warning, TEXT("🎨 SetupTrapVisuals called on %s"), 
+           HasAuthority() ? TEXT("Server") : TEXT("Client"));
+
     if (ItemMesh)
     {
-        // Create dynamic material instance and set color
+        // ✅ 기본 메시가 없으면 설정
+        if (!ItemMesh->GetStaticMesh())
+        {
+            static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultMesh(TEXT("/Engine/BasicShapes/Cylinder"));
+            if (DefaultMesh.Succeeded())
+            {
+                ItemMesh->SetStaticMesh(DefaultMesh.Object);
+                UE_LOG(LogTemp, Warning, TEXT("🎨 Set default cylinder mesh"));
+            }
+        }
+        
+        // ✅ TrapData에서 메시가 있으면 사용
+        if (TrapData.TrapMesh)
+        {
+            ItemMesh->SetStaticMesh(TrapData.TrapMesh);
+            UE_LOG(LogTemp, Warning, TEXT("🎨 Set TrapData mesh: %s"), *TrapData.TrapMesh->GetName());
+        }
+        
+        // ✅ 기본 스케일 보장
+        FVector CurrentScale = ItemMesh->GetComponentScale();
+        if (CurrentScale.IsNearlyZero())
+        {
+            ItemMesh->SetWorldScale3D(FVector(0.5f, 0.5f, 0.1f));
+        }
+        
+        // ✅ 가시성 강제 보장
+        ItemMesh->SetVisibility(true);
+        ItemMesh->SetHiddenInGame(false);
+        ItemMesh->SetCastShadow(true);
+        
+        // ✅ 렌더 상태 업데이트 강제
+        ItemMesh->MarkRenderStateDirty();
+        
+        // ✅ 머티리얼 설정 개선 - 중복 생성 방지
         UMaterialInterface* Material = ItemMesh->GetMaterial(0);
-        if (Material)
+        if (Material && !Material->IsA<UMaterialInstanceDynamic>())
         {
             UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(Material, this);
             if (DynamicMaterial)
             {
                 DynamicMaterial->SetVectorParameterValue(TEXT("BaseColor"), TrapData.TrapColor);
                 ItemMesh->SetMaterial(0, DynamicMaterial);
+                
+                UE_LOG(LogTemp, Warning, TEXT("🎨 Applied dynamic material with color %s"), 
+                       *TrapData.TrapColor.ToString());
             }
         }
+        else if (!Material)
+        {
+            // ✅ 머티리얼이 없으면 기본 머티리얼 생성
+            UMaterialInterface* DefaultMat = UMaterial::GetDefaultMaterial(MD_Surface);
+            if (DefaultMat)
+            {
+                UMaterialInstanceDynamic* DefaultMaterial = UMaterialInstanceDynamic::Create(DefaultMat, this);
+                if (DefaultMaterial)
+                {
+                    DefaultMaterial->SetVectorParameterValue(TEXT("BaseColor"), TrapData.TrapColor);
+                    ItemMesh->SetMaterial(0, DefaultMaterial);
+                    
+                    UE_LOG(LogTemp, Warning, TEXT("🎨 Created default material with color %s"), 
+                           *TrapData.TrapColor.ToString());
+                }
+            }
+        }
+        
+        UE_LOG(LogTemp, Warning, TEXT("🎨 Trap visuals setup complete: Mesh=%s, Scale=%s, Visible=%s, Hidden=%s"), 
+               ItemMesh->GetStaticMesh() ? *ItemMesh->GetStaticMesh()->GetName() : TEXT("NULL"),
+               *ItemMesh->GetComponentScale().ToString(),
+               ItemMesh->IsVisible() ? TEXT("true") : TEXT("false"),
+               ItemMesh->bHiddenInGame ? TEXT("true") : TEXT("false"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ ItemMesh is NULL in SetupTrapVisuals"));
     }
 }
 
@@ -318,7 +375,6 @@ void ACYTrapBase::PlayTrapSound_Implementation()
 
 void ACYTrapBase::ApplyCustomEffects_Implementation(ACYPlayerCharacter* Target)
 {
-    // 기본 구현 - 하위 클래스에서 오버라이드
     UE_LOG(LogTemp, Log, TEXT("🎯 Applying base custom effects"));
 }
 
@@ -331,7 +387,6 @@ void ACYTrapBase::ApplyTrapEffects(ACYPlayerCharacter* Target)
 
     UE_LOG(LogTemp, Warning, TEXT("🎯 Applying trap effects to %s"), *Target->GetName());
 
-    // 기본 게임플레이 효과들 적용
     for (TSubclassOf<UGameplayEffect> EffectClass : TrapData.GameplayEffects)
     {
         if (EffectClass)
@@ -340,7 +395,6 @@ void ACYTrapBase::ApplyTrapEffects(ACYPlayerCharacter* Target)
         }
     }
 
-    // 레거시 ItemEffects도 적용 (호환성)
     for (TSubclassOf<UGameplayEffect> EffectClass : ItemEffects)
     {
         if (EffectClass)
@@ -349,7 +403,6 @@ void ACYTrapBase::ApplyTrapEffects(ACYPlayerCharacter* Target)
         }
     }
 
-    // 하위 클래스별 커스텀 효과
     ApplyCustomEffects(Target);
 
     UE_LOG(LogTemp, Log, TEXT("✅ Applied %d trap effects"), 

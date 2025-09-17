@@ -1,4 +1,4 @@
-﻿// CYInventoryComponent.cpp - 중복 실행 방지 및 단순화
+﻿// CYInventoryComponent.cpp - 특정 아이템 사용 수정
 #include "Components/CYInventoryComponent.h"
 #include "Items/CYItemBase.h"
 #include "AbilitySystemComponent.h"
@@ -15,8 +15,6 @@ UCYInventoryComponent::UCYInventoryComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
     SetIsReplicatedByDefault(true);
-    
-    // ✅ 중복 사용 방지
     bIsProcessingUse = false;
 }
 
@@ -33,7 +31,7 @@ void UCYInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(UCYInventoryComponent, WeaponSlots);
     DOREPLIFETIME(UCYInventoryComponent, ItemSlots);
-    DOREPLIFETIME(UCYInventoryComponent, bIsProcessingUse); // ✅ 처리 상태 동기화
+    DOREPLIFETIME(UCYInventoryComponent, bIsProcessingUse);
 }
 
 bool UCYInventoryComponent::AddItem(ACYItemBase* Item, int32 SlotIndex)
@@ -110,7 +108,6 @@ bool UCYInventoryComponent::UseItem(int32 SlotIndex)
 {
     UE_LOG(LogTemp, Warning, TEXT("📦 UCYInventoryComponent::UseItem called with SlotIndex: %d"), SlotIndex);
 
-    // ✅ 중복 사용 방지
     if (bIsProcessingUse)
     {
         UE_LOG(LogTemp, Warning, TEXT("📦 Already processing item use, ignoring"));
@@ -124,7 +121,6 @@ bool UCYInventoryComponent::UseItem(int32 SlotIndex)
         return false;
     }
 
-    // ✅ 처리 시작 플래그 설정
     bIsProcessingUse = true;
 
     ACYItemBase* Item = GetItem(SlotIndex);
@@ -146,7 +142,6 @@ bool UCYInventoryComponent::UseItem(int32 SlotIndex)
 
     bool bResult = false;
 
-    // 무기 장착
     if (SlotType == EInventorySlotType::Weapon)
     {
         UE_LOG(LogTemp, Warning, TEXT("📦 Trying to equip weapon"));
@@ -154,7 +149,7 @@ bool UCYInventoryComponent::UseItem(int32 SlotIndex)
     }
     else
     {
-        // ✅ 트랩 아이템 사용 - 직접 GA_PlaceTrap 실행
+        // ✅ 트랩 아이템 사용 - 특정 아이템을 전달
         FGameplayTag TrapTag = FGameplayTag::RequestGameplayTag("Item.Trap");
         if (Item->ItemTag.MatchesTag(TrapTag))
         {
@@ -169,7 +164,6 @@ bool UCYInventoryComponent::UseItem(int32 SlotIndex)
         }
     }
 
-    // ✅ 처리 완료 후 플래그 해제
     GetWorld()->GetTimerManager().SetTimerForNextTick([this]()
     {
         bIsProcessingUse = false;
@@ -196,7 +190,7 @@ bool UCYInventoryComponent::UseTrapItemDirect(ACYItemBase* Item, int32 LocalInde
         return false;
     }
 
-    // ✅ 트랩 배치 어빌리티 한 번만 실행
+    // ✅ 트랩 배치 어빌리티를 특정 아이템과 함께 실행
     FGameplayTag TrapPlaceTag = FGameplayTag::RequestGameplayTag("Ability.Trap.Place");
     
     // ✅ 쿨다운 체크
@@ -208,14 +202,11 @@ bool UCYInventoryComponent::UseTrapItemDirect(ACYItemBase* Item, int32 LocalInde
         return false;
     }
 
-    bool bSuccess = CyASC->TryActivateAbilityByTag(TrapPlaceTag);
+    // ✅ 특정 아이템을 SourceObject로 전달하여 어빌리티 실행
+    bool bSuccess = CyASC->TryActivateAbilityByTagWithSource(TrapPlaceTag, Item);
     
-    UE_LOG(LogTemp, Warning, TEXT("🎯 TrapPlace ability result: %s"), bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
-    
-    if (bSuccess)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("⚡ Trap placement initiated successfully"));
-    }
+    UE_LOG(LogTemp, Warning, TEXT("🎯 TrapPlace ability result: %s (SourceItem: %s)"), 
+           bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"), *Item->ItemName.ToString());
     
     return bSuccess;
 }
@@ -265,8 +256,6 @@ bool UCYInventoryComponent::AddItemWithStacking(ACYItemBase* Item)
     
     return true;
 }
-
-// === 헬퍼 함수들 (기존 유지) ===
 
 int32 UCYInventoryComponent::FindEmptyWeaponSlot() const
 {

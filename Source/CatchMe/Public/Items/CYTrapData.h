@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
 #include "GameplayTagContainer.h"
+#include "Engine/NetSerialization.h"
 #include "CYTrapData.generated.h"
 
 class UGameplayEffect;
@@ -73,4 +74,28 @@ struct CATCHME_API FTrapData : public FTableRowBase
     // 색상 (구분용)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visuals")
     FLinearColor TrapColor = FLinearColor::White;
+
+    // ✅ 네트워크 직렬화 지원
+    bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess)
+    {
+        // 기본적인 데이터만 직렬화 (에셋 참조는 제외)
+        Ar << TrapType;
+        Ar << TriggerRadius;
+        Ar << ArmingDelay; 
+        Ar << TrapLifetime;
+        Ar << TrapColor;
+        
+        bOutSuccess = true;
+        return true;
+    }
+};
+
+// ✅ 네트워크 직렬화 지원 선언
+template<>
+struct TStructOpsTypeTraits<FTrapData> : public TStructOpsTypeTraitsBase2<FTrapData>
+{
+    enum
+    {
+        WithNetSerializer = true,
+    };
 };

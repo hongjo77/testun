@@ -1,4 +1,4 @@
-﻿// GA_PlaceTrap.h - 새로운 함수 선언 추가
+﻿// GA_PlaceTrap.h - 특정 아이템 소모 함수 추가
 #pragma once
 
 #include "CoreMinimal.h"
@@ -9,8 +9,7 @@ class ACYTrapBase;
 class ACYItemBase;
 
 /**
- * 대폭 단순화된 트랩 배치 어빌리티
- * 팩토리 패턴을 사용하여 결합도를 낮춤
+ * 트랩 배치 어빌리티 - 사용자가 선택한 특정 아이템 사용
  */
 UCLASS()
 class CATCHME_API UGA_PlaceTrap : public UGameplayAbility
@@ -30,12 +29,13 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Trap")
 	FVector CalculateSpawnLocation(AActor* OwnerActor);
 
-	// ✅ 새로운 함수들 - 인벤토리에서 직접 아이템 관리
+	// ✅ 인벤토리에서 아이템 관리
 	UFUNCTION(BlueprintCallable, Category = "Trap")
 	ACYItemBase* FindValidTrapItemInInventory(AActor* OwnerActor);
 
+	// ✅ 특정 아이템만 소모하는 함수 (새로 추가)
 	UFUNCTION(BlueprintCallable, Category = "Trap")
-	void ConsumeItemFromInventory(AActor* OwnerActor, ACYItemBase* SourceItem);
+	void ConsumeSpecificItemFromInventory(AActor* OwnerActor, ACYItemBase* SourceItem);
 
 	// 쿨다운 적용
 	void ApplyTrapCooldown(const FGameplayAbilitySpecHandle Handle, 
