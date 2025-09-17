@@ -2,11 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "GAS/CYAbilitySystemComponent.h"  // ✅ Cast를 위해 추가
 #include "CYInventoryComponent.generated.h"
 
 class ACYItemBase;
 class ACYWeaponBase;
 class UAbilitySystemComponent;
+class UCYAbilitySystemComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInventoryChanged, int32, SlotIndex, ACYItemBase*, Item);
 

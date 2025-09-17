@@ -63,7 +63,7 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
         return;
     }
 
-    // ✅ 더 안전한 SourceObject 획득
+    // ✅ AbilitySpec에서만 SourceObject 획득 (단순화)
     ACYItemBase* SourceItem = nullptr;
     const FGameplayAbilitySpec* CurrentSpec = GetCurrentAbilitySpec();
     if (CurrentSpec && CurrentSpec->SourceObject.IsValid())
@@ -72,21 +72,10 @@ void UGA_PlaceTrap::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
         UE_LOG(LogTemp, Warning, TEXT("🚀 GA_PlaceTrap: SourceItem from spec: %s"), 
                SourceItem ? *SourceItem->ItemName.ToString() : TEXT("NULL"));
     }
-    
-    // ✅ SourceObject가 없으면 TriggerEventData에서 시도
-    if (!SourceItem && TriggerEventData && TriggerEventData->ContextHandle.IsValid())
-    {
-        if (UObject* SourceObject = TriggerEventData->ContextHandle.GetSourceObject())
-        {
-            SourceItem = Cast<ACYItemBase>(SourceObject);
-            UE_LOG(LogTemp, Warning, TEXT("🚀 GA_PlaceTrap: SourceItem from TriggerEventData: %s"), 
-                   SourceItem ? *SourceItem->ItemName.ToString() : TEXT("NULL"));
-        }
-    }
 
     if (!SourceItem)
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ GA_PlaceTrap: No valid source item found"));
+        UE_LOG(LogTemp, Error, TEXT("❌ GA_PlaceTrap: No valid source item found in AbilitySpec"));
         EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
         return;
     }

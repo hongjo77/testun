@@ -22,4 +22,7 @@ public:
 	// 태그로 어빌리티 실행
 	UFUNCTION(BlueprintCallable, Category = "Abilities")
 	bool TryActivateAbilityByTag(FGameplayTag AbilityTag);
+
+	// ✅ SourceObject와 함께 어빌리티 활성화 (내부 사용)
+	bool TryActivateAbilityByTagWithSource(FGameplayTag AbilityTag, UObject* SourceObject);
 };

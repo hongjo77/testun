@@ -287,6 +287,14 @@ bool UCYInventoryComponent::ActivateItemAbility(ACYItemBase* Item, int32 SlotInd
         return false;
     }
 
+    // ✅ UCYAbilitySystemComponent로 캐스팅
+    UCYAbilitySystemComponent* CyASC = Cast<UCYAbilitySystemComponent>(ASC);
+    if (!CyASC)
+    {
+        UE_LOG(LogTemp, Error, TEXT("❌ ASC is not UCYAbilitySystemComponent"));
+        return false;
+    }
+
     if (!Item->ItemAbility) 
     {
         UE_LOG(LogTemp, Error, TEXT("❌ Item has no ItemAbility: %s"), *Item->ItemName.ToString());
@@ -295,29 +303,23 @@ bool UCYInventoryComponent::ActivateItemAbility(ACYItemBase* Item, int32 SlotInd
 
     UE_LOG(LogTemp, Warning, TEXT("⚡ Looking for ability: %s"), *Item->ItemAbility->GetName());
 
-    FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Item->ItemAbility);
-    if (!Spec) 
+    // ✅ 새로운 단순화된 함수 사용 - SourceObject 직접 전달
+    FGameplayTag AbilityTag = FGameplayTag::RequestGameplayTag("Ability.Trap.Place");
+    bool bSuccess = CyASC->TryActivateAbilityByTagWithSource(AbilityTag, Item);
+    
+    UE_LOG(LogTemp, Warning, TEXT("⚡ TryActivateAbilityByTagWithSource result: %s"), bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
+    
+    if (bSuccess)
     {
-        UE_LOG(LogTemp, Error, TEXT("❌ Ability spec not found for: %s"), *Item->ItemAbility->GetName());
-        return false;
-    }
-
-    // ✅ SourceObject를 설정하고 어빌리티 활성화
-    UE_LOG(LogTemp, Warning, TEXT("⚡ Found ability spec, setting SourceObject to: %s"), *Item->GetName());
-    Spec->SourceObject = Item;
-    
-    // ✅ 어빌리티 활성화 전에 아이템 정보 미리 저장
-    FGameplayTag ConsumableTag = FGameplayTag::RequestGameplayTag("Item.Consumable");
-    FGameplayTag TrapTag = FGameplayTag::RequestGameplayTag("Item.Trap");
-    bool bShouldConsume = Item->ItemTag.MatchesTag(ConsumableTag) || Item->ItemTag.MatchesTag(TrapTag);
-    
-    bool bSuccess = ASC->TryActivateAbility(Spec->Handle);
-    UE_LOG(LogTemp, Warning, TEXT("⚡ TryActivateAbility result: %s"), bSuccess ? TEXT("SUCCESS") : TEXT("FAILED"));
-    
-    if (bSuccess && bShouldConsume)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("⚡ Ability activated successfully, processing item consumption"));
-        ProcessItemConsumption(Item, SlotIndex);
+        UE_LOG(LogTemp, Warning, TEXT("⚡ Ability activated successfully"));
+        
+        // ✅ 소모성 아이템 처리
+        FGameplayTag ConsumableTag = FGameplayTag::RequestGameplayTag("Item.Consumable");
+        FGameplayTag TrapTag = FGameplayTag::RequestGameplayTag("Item.Trap");
+        if (Item->ItemTag.MatchesTag(ConsumableTag) || Item->ItemTag.MatchesTag(TrapTag))
+        {
+            ProcessItemConsumption(Item, SlotIndex);
+        }
     }
     
     return bSuccess;
